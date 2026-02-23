@@ -479,12 +479,12 @@ declare namespace Vide {
 	// overload for a map input
 	function For<K, VI, VO extends Node | void>(props: {
 		each: () => Map<K, VI> | ReadonlyMap<K, VI>;
-		children: (value: VI, key: () => K) => VO;
+		children: (value: VI, key: () => K) => MaybeDelayed<VO>;
 	}): () => VO[];
 	// overload for an object input
 	function For<K extends Key, VI, VO extends Node | void>(props: {
 		each: () => { readonly [P in K]: VI };
-		children: (value: VI, key: () => K) => VO;
+		children: (value: VI, key: () => K) => MaybeDelayed<VO>;
 	}): () => VO[];
 
 	/**
@@ -520,12 +520,12 @@ declare namespace Vide {
 	// overload for a map input
 	function Index<K, VI, VO extends Node | void>(props: {
 		each: () => Map<K, VI> | ReadonlyMap<K, VI>;
-		children: (value: () => VI, key: K) => VO;
+		children: (value: () => VI, key: K) => MaybeDelayed<VO>;
 	}): () => VO[];
 	// overload for an object input
 	function Index<K extends Key, VI, VO extends Node | void>(props: {
 		each: () => { readonly [P in K]: VI };
-		children: (value: () => VI, key: K) => VO;
+		children: (value: () => VI, key: K) => MaybeDelayed<VO>;
 	}): () => VO[];
 
 	/**
@@ -586,9 +586,9 @@ declare namespace Vide {
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-flow#show
 	 */
-	function Show(props: {
-		when: () => any;
-		children: (show: () => boolean) => MaybeDelayed<Node> | void;
+	function Show<Condition>(props: {
+		when: () => Condition;
+		children: (value: () => NonNullable<Condition>, show: () => boolean) => MaybeDelayed<Node> | void;
 		fallback?: (show: () => boolean) => MaybeDelayed<Node> | void;
 	}): () => Node;
 

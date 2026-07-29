@@ -23,10 +23,8 @@ local IGNORED_CHANGE_PROPS = {
 
 local tags = {}
 
-if game then
-    for _, class in game:GetService("ReflectionService"):GetClasses() do
-	    tags[string.lower(class.Name)] = class.Name
-    end
+for _, class in game:GetService("ReflectionService"):GetClasses() do
+    tags[string.lower(class.Name)] = class.Name
 end
 
 local function jsx(tag: string | (Props) -> any, props: Props, ...): any

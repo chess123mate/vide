@@ -2,7 +2,6 @@ local flags = require "./flags"
 local branch = require "./branch"
 local source = require "./source"
 local effect = require "./effect"
-local timeout = require "./timeout" ()
 
 type Array<T> = { T }
 type Map<K, V> = { [K]: V }
@@ -21,7 +20,7 @@ local function values<K, V, Obj>(
         count: number,
         delay: number,
         present: (boolean?) -> boolean,
-        timeout: { cancel: boolean }?,
+        timeout: thread?,
     }>
 
     local output = source({} :: Array<Obj>)
@@ -69,7 +68,7 @@ local function values<K, V, Obj>(
                 end)
 
                 present(true)
-                
+
                 children_need_update = true
 
                 scopes[v] = {
@@ -87,11 +86,11 @@ local function values<K, V, Obj>(
 
                 if scope.index ~= i then
                     if scope.timeout then -- value is in input table again; cancel destruction
-                        scope.timeout.cancel = true
+                        task.cancel(scope.timeout)
                         scope.timeout = nil
                         scope.present(true)
                     end
-                    
+
                     scope.index = i
                     scope.index_source(i)
                 end
@@ -110,7 +109,7 @@ local function values<K, V, Obj>(
                 else
                     scope.index = nil -- set to nil for the `scope.index ~= i` check
                     if scope.timeout == nil then
-                        scope.timeout = timeout(scope.delay, function() -- todo: possible redundant updates
+                        scope.timeout = task.delay(scope.delay, function() -- todo: possible redundant updates
                             scope.destroy()
                             scopes[v] = nil
                             update_output()

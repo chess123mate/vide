@@ -1,7 +1,6 @@
 local branch = require "./branch"
 local source = require "./source"
 local effect = require "./effect"
-local timeout = require "./timeout" ()
 
 type Array<T> = { T }
 type Map<K, V> = { [K]: V }
@@ -17,7 +16,7 @@ local function switch_map<K, Obj>(
         object: Obj,
         delay: number,
         present: (boolean?) -> boolean,
-        timeout: { cancel: boolean }?
+        timeout: thread?
     }>
 
     local output = source(nil :: nil | Obj | Array<Obj>)
@@ -48,8 +47,8 @@ local function switch_map<K, Obj>(
                 scope.destroy()
                 scopes[k] = nil
             else
-                if scope.timeout == nil then
-                    scope.timeout = timeout(scope.delay, function()
+                if not scope.timeout then
+                    scope.timeout = task.delay(scope.delay, function()
                         scope.destroy()
                         scopes[k] = nil
                         update_output()
@@ -66,7 +65,7 @@ local function switch_map<K, Obj>(
                 scope.present(true)
 
                 if scope.timeout then
-                    scope.timeout.cancel = true
+                    task.cancel(scope.timeout)
                     scope.timeout = nil
                 end
             else
@@ -93,7 +92,7 @@ local function switch_map<K, Obj>(
                         object = object,
                         delay = delay or 0,
                         present = present,
-                        timeout = nil
+                        timeout = nil,
                     }
                 end
             end

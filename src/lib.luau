@@ -20,7 +20,6 @@ local values = require "./values"
 local spring, update_springs = require "./spring"()
 local action = require "./action"()
 local changed = require "./changed"
-local timeout, update_timeouts = require "./timeout"()
 local flags = require "./flags"
 local components = require "./components"
 local jsx = require "./jsx"
@@ -30,24 +29,9 @@ export type source<T> = Source<T>
 export type Context<T> = context.Context<T>
 export type context<T> = Context<T>
 
-local function step(dt: number)
-    if game then
-        debug.profilebegin("VIDE STEP")
-        debug.profilebegin("VIDE SPRING")
-    end
-    update_springs(dt)
-    if game then
-        debug.profileend()
-        debug.profilebegin("VIDE SCHEDULER")
-    end
-    update_timeouts(dt)
-    if game then
-        debug.profileend()
-        debug.profileend()
-    end
-end
+local step = update_springs
 
-local stepped = game and game:GetService("RunService").Heartbeat:Connect(function(dt: number)
+local stepped = game:GetService("RunService").Heartbeat:Connect(function(dt: number)
     task.defer(step, dt)
 end)
 

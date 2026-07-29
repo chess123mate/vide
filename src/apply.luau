@@ -1,5 +1,3 @@
-local typeof = game and typeof or require "../test/mock".typeof :: never
-
 local flags = require "./flags"
 local implicit_effect = require "./implicit_effect"
 local _, is_action = require "./action"()

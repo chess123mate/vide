@@ -422,7 +422,7 @@ declare namespace Vide {
 	 *
 	 * @returns The instance with the properties applied.
 	 */
-	function apply<T extends Instance>(instance: T): (props: LegacyInstanceProps<T>) => T;
+	function apply<T extends Instance>(instance: T, props: LegacyInstanceProps<T>): T;
 
 	/**
 	 * By default, springs run at 120 Hz in the `Heartbeat` event. Calling this

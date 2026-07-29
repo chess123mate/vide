@@ -59,6 +59,7 @@ local vide = {
     branch = branch,
     mount = mount,
     create = create,
+    apply = apply,
     source = source,
     effect = effect,
     derive = derive,
@@ -86,13 +87,6 @@ local vide = {
     defaults = (nil :: any) :: boolean,
     defer_nested_properties = (nil :: any) :: boolean,
 
-    -- temporary
-    apply = function(instance: Instance)
-        return function(props: { [any]: any })
-            apply(instance, props)
-            return instance
-        end
-    end,
 
     -- runtime
     step = function(dt: number)

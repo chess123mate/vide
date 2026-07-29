@@ -1495,10 +1495,10 @@ TEST("switch()", wrap_root(function()
     end
 
     do CASE "reactive stack resets after error"
-    local scopes = require "../src/graph".scopes
+        local get_scopes_n = require "../src/graph".get_scopes_n
         local input = source(1)
 
-        local n0 = scopes.n
+        local n0 = get_scopes_n()
 
         local ok = pcall(function()
             switch(input) {
@@ -1508,7 +1508,7 @@ TEST("switch()", wrap_root(function()
 
         CHECK(not ok)
 
-        local n1 = scopes.n
+        local n1 = get_scopes_n()
 
         CHECK(n0 == n1)
     end
@@ -1655,11 +1655,11 @@ TEST("indexes()", wrap_root(function()
     end
 
     do CASE "reactive stack resets after error"
-        local scopes = require "../src/graph".scopes
+        local get_scopes_n = require "../src/graph".get_scopes_n
 
         local input = source { 1 }
 
-        local n0 = scopes.n
+        local n0 = get_scopes_n()
 
         local ok = pcall(function()
             indexes(input, function()
@@ -1670,7 +1670,7 @@ TEST("indexes()", wrap_root(function()
 
         CHECK(not ok)
 
-        local n1 = scopes.n
+        local n1 = get_scopes_n()
 
         CHECK(n0 == n1)
     end
@@ -1904,11 +1904,11 @@ TEST("values()", wrap_root(function()
     end
 
     do CASE "reactive stack resets after error"
-        local scopes = require "../src/graph".scopes
+        local get_scopes_n = require "../src/graph".get_scopes_n
 
         local input = source { 1 }
 
-        local n0 = scopes.n
+        local n0 = get_scopes_n()
 
         local ok = pcall(function()
             values(input, function()
@@ -1919,7 +1919,7 @@ TEST("values()", wrap_root(function()
 
         CHECK(not ok)
 
-        local n1 = scopes.n
+        local n1 = get_scopes_n()
 
         CHECK(n0 == n1)
     end

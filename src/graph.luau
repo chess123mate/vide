@@ -19,8 +19,9 @@ export type Node<T> =  {
     [number]: Node<T> -- children
 }
 
-local scopes = { n = 0 } :: { [number]: Node<any>, n: number } -- scopes stack
-
+local scopes_n = 0
+local scopes = {} :: { [number]: Node<any>, n: number } -- scopes stack
+local function get_scopes_n() return scopes_n end
 local function efn(err: string)
     local trace = debug.traceback(err, 2)
 
@@ -50,7 +51,7 @@ local function ycall<T, U>(fn: (T) -> U, arg: T): (boolean, string|U)
 end
 
 local function get_scope(): Node<unknown>?
-    return scopes[scopes.n]
+    return scopes[scopes_n]
 end
 
 local function assert_stable_scope(): Node<unknown>
@@ -72,14 +73,14 @@ local function push_child<T>(parent: SourceNode<any>, child: Node<any>)
 end
 
 local function push_scope<T>(node: Node<T>)
-    local n = scopes.n + 1
-    scopes.n = n
+    local n = scopes_n + 1
+    scopes_n = n
     scopes[n] = node
 end
 
 local function pop_scope()
-    local n = scopes.n
-    scopes.n = n - 1
+    local n = scopes_n
+    scopes_n = n - 1
     scopes[n] = nil
 end
 
@@ -143,7 +144,8 @@ local function destroy_owned<T>(node: Node<T>)
     end
 end
 
-local update_queue = { n = 0 } :: { n: number, [number]: Node<any> }
+local update_queue_n = 0
+local update_queue = {} :: { n: number, [number]: Node<any> }
 
 local function evaluate_node<T>(node: Node<T>)
     if flags.strict then
@@ -165,7 +167,7 @@ local function evaluate_node<T>(node: Node<T>)
 
             if not ok then
                 table.clear(update_queue)
-                update_queue.n = 0
+                update_queue_n = 0
                 error(`effect error stacktrace\n{new_value :: string}`, 0)
             end
 
@@ -185,7 +187,7 @@ local function evaluate_node<T>(node: Node<T>)
 
         if not ok then
             table.clear(update_queue)
-            update_queue.n = 0
+            update_queue_n = 0
             error(`effect error:\n{new_value}\n`, 0)
         end
 
@@ -195,22 +197,22 @@ local function evaluate_node<T>(node: Node<T>)
 end
 
 local function queue_children_for_update<T>(node: SourceNode<T>)
-    local i = update_queue.n
+    local i = update_queue_n
     while node[1] do
         i += 1
         update_queue[i] = node[1]
         unparent(node[1])
     end
-    update_queue.n = i
+    update_queue_n = i
 end
 
 local function get_update_queue_length()
-    return update_queue.n
+    return update_queue_n
 end
 
 local function flush_update_queue(from: number)
     local i = from + 1
-    while i <= update_queue.n do
+    while i <= update_queue_n do
         local node = update_queue[i]
         --assert(node.effect)
 
@@ -222,17 +224,17 @@ local function flush_update_queue(from: number)
         i += 1
     end
 
-    update_queue.n = from
+    update_queue_n = from
 end
 
 local function update_descendants<T>(root: SourceNode<T>)
-    local n0 = update_queue.n
+    local n0 = update_queue_n
     queue_children_for_update(root)
 
     if flags.batch then return end
 
     local i = n0 + 1
-    while i <= update_queue.n do
+    while i <= update_queue_n do
         local node = update_queue[i]
         --assert(node.effect)
 
@@ -245,7 +247,7 @@ local function update_descendants<T>(root: SourceNode<T>)
         i += 1
     end
 
-    update_queue.n = n0
+    update_queue_n = n0
 end
 
 local function push_scope_as_child_of<T>(node: SourceNode<T>)
@@ -315,6 +317,5 @@ return table.freeze {
     get_update_queue_length = get_update_queue_length,
     set_context = set_context,
     scopes = scopes,
-
-    q = update_queue
+    get_scopes_n = get_scopes_n,
 }

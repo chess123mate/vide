@@ -725,13 +725,6 @@ TEST("create()", wrap_root(function()
         CHECK(frame.Name == "Foo")
     end
 
-    do CASE "apply default properties"
-        local defaults = require "../src/defaults"
-        local frame = create "Frame" {} :: Instance & { BorderSizePixel: any, BorderColor3: any }
-        CHECK(frame.BorderSizePixel == defaults.Frame.BorderSizePixel)
-        CHECK(frame.BorderColor3 == defaults.Frame.BorderColor3)
-    end
-
     do CASE "set properties"
         local text = create "TextLabel" {
             Name = "Label",

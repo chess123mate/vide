@@ -20,16 +20,15 @@ local function root<T...>(fn: (destroy: () -> ()) -> T...): (() -> (), T...)
 
     push_scope(node)
 
-    local result = { xpcall(fn, debug.traceback, destroy) }
-
-    pop_scope()
-
-    if not result[1] then
-        destroy()
-        error(`error while running root():\n\n{result[2]}`, 0)
+    local function handleResults(ok, result, ...)
+        pop_scope()
+        if not ok then
+            destroy()
+            error(`error while running root():\n\n{result}`, 3)
+        end
+        return destroy, result, ...
     end
-
-    return destroy, unpack(result :: any, 2)
+    return handleResults(xpcall(fn, debug.traceback, destroy))
 end
 
 return root :: <T...>(fn: (destroy: () -> ()) -> T...) -> (() -> (), T...)

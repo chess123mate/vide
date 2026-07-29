@@ -77,13 +77,7 @@ local function switch_map<K, Obj>(
                     end
 
                     local present = source(false)
-
-                    local delay = nil :: number?
-                    local destroy, object = branch(function()
-                        local object, t = component(present)
-                        delay = t
-                        return object
-                    end)
+                    local destroy, object, delay = branch(component, present)
 
                     present(true)
 

@@ -6,7 +6,7 @@ local pop_scope = graph.pop_scope
 local destroy = graph.destroy
 local get_scope = graph.get_scope
 
-local function branch<T>(fn: () -> T): (() -> (), T)
+local function branch<T>(fn: () -> T, ...): (() -> (), T)
     local current = get_scope() or error(`cannot use branch() outside a stable or reactive scope`, 2)
     local parent = current.owner or error(`current scope is not owned by a scope`, 2)
 
@@ -29,7 +29,7 @@ local function branch<T>(fn: () -> T): (() -> (), T)
         return destroy, result, ...
     end
 
-    return handleResults(xpcall(fn, debug.traceback))
+    return handleResults(xpcall(fn, debug.traceback, ...))
 end
 
 return branch

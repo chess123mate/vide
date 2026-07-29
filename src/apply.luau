@@ -111,8 +111,11 @@ end
 
 -- applies table of nested properties to an instance using full vide semantics
 local function apply<T>(instance: T & Instance, properties: { [unknown]: unknown }): T
+    if not instance then
+        error("attempt to call apply with no instance", 2)
+    end
     if not properties then
-        error "attempt to call a constructor returned by create() with no properties"
+        error("attempt to call apply with no properties", 2)
     end
 
     local caches = borrow_cache()

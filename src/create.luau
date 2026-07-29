@@ -26,33 +26,30 @@ end
 
 local constructor_cache = {} :: { [string]: ({ [unknown]: unknown }) -> Instance }
 
--- todo: remove support for different overloads
 local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?): unknown
     local type_ = typeof(class_or_instance)
     if type_ ~= "string" and type_ ~= "Instance" then
-        error("bad argument #1, expected string or instance, got " .. type_, 2)
+        error("create argument #1, expected string or instance, got " .. type_, 2)
+    end
+    if not properties then
+        error("create argument #2, missing properties", 2)
     end
 
-    local constructor: ({ [unknown]: unknown }) -> Instance
     if type_ == "string" then
+        local constructor: ({ [unknown]: unknown }) -> Instance
         constructor = constructor_cache[class_or_instance]
         if not constructor then
             constructor = create_constructor_for_class(class_or_instance)
             constructor_cache[class_or_instance] = constructor
         end
+        return constructor(properties)
     else
-        constructor = function(props)
-            local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
-            return apply(clone, props)
-        end
+        local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
+        return apply(clone, properties)
     end
-
-    return if properties
-        then constructor(properties)
-        else constructor
 end
 
-type Instances = {
+export type Instances = {
     Folder: Folder,
     BillboardGui: BillboardGui,
     CanvasGroup: CanvasGroup,
@@ -70,11 +67,23 @@ type Instances = {
     UIGradient: UIGradient,
     UIGridLayout: UIGridLayout,
     UIListLayout: UIListLayout,
+    UISizeConstraint: UISizeConstraint,
+    UITextSizeConstraint: UITextSizeConstraint,
+    UIScale: UIScale,
+    UIPadding: UIPadding,
+    UIStroke: UIStroke,
+    UIFlexItem: UIFlexItem,
+    UIPageLayout: UIPageLayout,
+    UITableLayout: UITableLayout,
+    VideoFrame: VideoFrame,
+    ViewportFrame: ViewportFrame,
+    ProximityPrompt: ProximityPrompt,
+    UIDragDetector: UIDragDetector,
     Camera: Camera,
     WorldModel: WorldModel,
 }
 
-type function Properties(instance: type?)
+export type function Properties(instance: type?)
     local properties = types.newtable()
 
     while instance do
@@ -102,6 +111,6 @@ type function Properties(instance: type?)
     return properties
 end
 
-type Create = <Name>(Name|keyof<Instances>|"") -> (Properties<index<Instances, Name>>) -> index<Instances, Name>
+type Create = <Name>(Name|keyof<Instances>|"", Properties<index<Instances, Name>>) -> index<Instances, Name>
 
 return create :: Create

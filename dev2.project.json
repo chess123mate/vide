@@ -1,0 +1,15 @@
+{
+	"name": "Vide",
+	"globIgnorePaths": [
+		"**/*.d.ts"
+	],
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"vide": {
+				"$path": "src"
+			}
+		}
+	}
+}

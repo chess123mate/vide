@@ -58,10 +58,10 @@ declare namespace Vide {
 		| Instance
 		| RBXScriptConnection
 		| thread
+		| { Disconnect(): void }
+		| { Destroy(): void }
 		| { disconnect(): void }
 		| { destroy(): void }
-		| { Disconnect(): void }
-		| { Destroy(): void };
 
 	/**
 	 * A component return value that can optionally provide a delay time in

@@ -66,8 +66,6 @@ local function context<T>(...: T): Context<T>
 
             return result
         end
-
-        return nil :: any
     end
 end
 

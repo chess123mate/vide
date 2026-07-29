@@ -64,7 +64,7 @@ local function jsx(tag: string | (Props) -> any, props: Props, ...): any
             table.insert(props, child)
         end
 
-        return create(tag)(props)
+        return (create :: any)(tag, props)
     end
 
     local count = select("#", ...)

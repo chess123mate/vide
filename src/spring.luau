@@ -48,7 +48,7 @@ local type_to_vec6 = {
     end :: TypeToVec6<number>,
 
     CFrame = function(v)
-        return v.Position, vector.create(v:ToEulerAnglesXYZ())
+        return v.Position, (vector.create :: any)(v:ToEulerAnglesXYZ())
     end :: TypeToVec6<CFrame>,
 
     Color3 = function(v)

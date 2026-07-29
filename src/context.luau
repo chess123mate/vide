@@ -24,7 +24,7 @@ local function context<T>(...: T): Context<T>
         if select("#", ...) == 0 then -- get
             while scope do
                 local ctx = scope.context
-    
+
                 if not ctx then
                     scope = scope.owner
                     continue
@@ -36,20 +36,20 @@ local function context<T>(...: T): Context<T>
                     scope = scope.owner
                     continue
                 end
-                
+
                 return (if value ~= nil_symbol then value else nil) :: T
             end
 
             if has_default ~= nil then
                 return default_value
             else
-                error("attempt to get context when no context is set and no default context is set", 0)
+                error("attempt to get context when no context is set and no default context is set", 2)
             end
         else -- set
-            if not scope then return error("attempt to set context outside of a vide scope", 0) end
+            if not scope then return error("attempt to set context outside of a vide scope", 2) end
 
             local value, component = ...
-            
+
             local new_scope = create_node(scope, false, false)
             set_context(new_scope, id, if value == nil then nil_symbol else value)
 
@@ -61,7 +61,7 @@ local function context<T>(...: T): Context<T>
             pop_scope()
 
             if not ok then
-                error(`error while running context:\n\n{result}`, 0)
+                error(`error while running context:\n\n{result}`, 2)
             end
 
             return result

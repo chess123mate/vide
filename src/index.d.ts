@@ -385,7 +385,7 @@ declare namespace Vide {
 	/**
 	 * Creates a callback that can be passed to `create()` to invoke custom
 	 * actions on instances. The callback will be invoked when the instance is
-	 * created, before any properties are applied.
+	 * created, after properties and children are applied.
 	 *
 	 * @param callback The function to run when the instance is created.
 	 * @param priority The priority of the action. Higher priorities run first.
@@ -600,7 +600,7 @@ declare namespace Vide {
 	}
 
 	/**
-	 * Creates a new context that can be used to share state between components.
+	 * Creates a new context that can be used to customize components.
 	 *
 	 * @example
 	 * ```tsx

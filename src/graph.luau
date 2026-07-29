@@ -41,7 +41,7 @@ local function ycall<T, U>(fn: (T) -> U, arg: T): (boolean, string|U)
     local resume_ok, run_ok, result = coroutine.resume(thread, fn, efn, arg)
 
     assert(resume_ok)
-        
+
     if coroutine.status(thread) ~= "dead" then
         return false, debug.traceback(thread, "attempt to yield in reactive scope")
     end
@@ -94,8 +94,7 @@ end
 local function flush_cleanups<T>(node: Node<T>)
     if node.cleanups then
         for _, fn in node.cleanups do
-            local ok, err: string? = xpcall(fn, debug.traceback)
-            if not ok then error(`cleanup error: {err}`, 0) end
+            fn()
         end
 
         table.clear(node.cleanups)
@@ -125,7 +124,7 @@ local function destroy<T>(node: Node<T>)
 
     flush_cleanups(node)
     unparent(node)
-    
+
     if node.owner then
         find_and_swap_pop(node.owner.owned :: { Node<T> }, node)
         node.owner = false
@@ -159,11 +158,11 @@ local function evaluate_node<T>(node: Node<T>)
 
             flush_cleanups(node)
             destroy_owned(node)
-    
+
             push_scope(node)
             local ok, new_value = ycall(node.effect :: (T) -> T, cur_value)
             pop_scope()
-            
+
             if not ok then
                 table.clear(update_queue)
                 update_queue.n = 0
@@ -189,7 +188,7 @@ local function evaluate_node<T>(node: Node<T>)
             update_queue.n = 0
             error(`effect error:\n{new_value}\n`, 0)
         end
-    
+
         node.cache = new_value
         return cur_value ~= new_value
     end
@@ -222,7 +221,7 @@ local function flush_update_queue(from: number)
         update_queue[i] = false :: any
         i += 1
     end
-    
+
     update_queue.n = from
 end
 

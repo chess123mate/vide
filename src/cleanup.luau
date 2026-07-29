@@ -4,30 +4,20 @@ local graph = require "./graph"
 local get_scope = graph.get_scope
 local push_cleanup = graph.push_cleanup
 
-local function helper(obj: any)
-    return
-        if typeof(obj) == "RBXScriptConnection" then function() obj:Disconnect() end
-        elseif type(obj) == "thread" then function() task.cancel(obj) end
-        elseif typeof(obj) == "Instance" then function() obj:Destroy() end
-        elseif obj.destroy then function() obj:destroy() end
-        elseif obj.disconnect then function() obj:disconnect() end
-        elseif obj.Destroy then function() obj:Destroy() end
-        elseif obj.Disconnect then function() obj:Disconnect() end
-        else error "cannot cleanup given object"
-end
-
 local function cleanup(value: unknown)
-    local scope = get_scope()
+    local scope = get_scope() or error("cannot cleanup outside a stable or reactive scope", 2)
 
-    if not scope then
-        error "cannot cleanup outside a stable or reactive scope"
-    end; assert(scope)
-
-    if type(value) == "function" then
-        push_cleanup(scope, value :: () -> ())
-    else
-        push_cleanup(scope, helper(value))
-    end
+    local type_ = typeof(value)
+    push_cleanup(scope,
+        if type_ == "function" then value
+        elseif type_ == "RBXScriptConnection" then function() value:Disconnect() end
+        elseif type_ == "thread" then function() task.cancel(value) end
+        elseif type_ == "Instance" then function() value:Destroy() end
+        elseif value.Disconnect then function() value:Disconnect() end
+        elseif value.Destroy then function() value:Destroy() end
+        elseif value.destroy then function() value:destroy() end
+        elseif value.disconnect then function() value:disconnect() end
+        else error("cannot cleanup given object", 2))
 end
 
 type Destroyable = { destroy: (any) -> () } | { Destroy: (any) -> () }

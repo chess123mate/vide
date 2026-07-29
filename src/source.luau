@@ -16,7 +16,7 @@ local function source<T>(initial_value: T): Source<T>
         end
 
         local v = ... :: T
-        if node.cache == v and (type(v) ~= "table" or table.isfrozen(v)) then 
+        if node.cache == v and (type(v) ~= "table" or table.isfrozen(v)) then
             return v
         end
 

@@ -7,8 +7,7 @@ local flags = require "./flags"
 
 local function create_constructor_for_class(class: string): ({ [unknown]: unknown }) -> Instance
     local function constructor(properties: { [unknown]: unknown }): Instance
-        local ok, instance: Instance = pcall(Instance.new, class :: any)
-        if not ok then error(`invalid class name {class}`, 0) end
+        local instance = Instance.new(class :: any)
 
         if flags.defaults then
             local default: { [string]: unknown }? = defaults[class]
@@ -29,12 +28,13 @@ local constructor_cache = {} :: { [string]: ({ [unknown]: unknown }) -> Instance
 
 -- todo: remove support for different overloads
 local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?): unknown
-    if type(class_or_instance) ~= "string" and typeof(class_or_instance) ~= "Instance" then
-        error("bad argument #1, expected string or instance, got " .. typeof(class_or_instance), 0)
+    local type_ = typeof(class_or_instance)
+    if type_ ~= "string" and type_ ~= "Instance" then
+        error("bad argument #1, expected string or instance, got " .. type_, 2)
     end
 
     local constructor: ({ [unknown]: unknown }) -> Instance
-    if type(class_or_instance) == "string" then
+    if type_ == "string" then
         constructor = constructor_cache[class_or_instance]
         if not constructor then
             constructor = create_constructor_for_class(class_or_instance)
@@ -42,7 +42,7 @@ local function create(class_or_instance: string|Instance, properties: { [unknown
         end
     else
         constructor = function(props)
-            local clone = assert(class_or_instance:Clone(), "attempt to clone a non-archivable instance")
+            local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
             return apply(clone, props)
         end
     end

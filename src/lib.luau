@@ -31,17 +31,20 @@ export type Context<T> = context.Context<T>
 export type context<T> = Context<T>
 
 local function step(dt: number)
-    if game then debug.profilebegin("VIDE STEP") end
-
-    if game then debug.profilebegin("VIDE SPRING") end
+    if game then
+        debug.profilebegin("VIDE STEP")
+        debug.profilebegin("VIDE SPRING")
+    end
     update_springs(dt)
-    if game then debug.profileend() end
-
-    if game then debug.profilebegin("VIDE SCHEDULER") end
+    if game then
+        debug.profileend()
+        debug.profilebegin("VIDE SCHEDULER")
+    end
     update_timeouts(dt)
-    if game then debug.profileend() end
-
-    if game then debug.profileend() end
+    if game then
+        debug.profileend()
+        debug.profileend()
+    end
 end
 
 local stepped = game and game:GetService("RunService").Heartbeat:Connect(function(dt: number)
@@ -53,7 +56,7 @@ local vide = {
 
     -- core
     root = root,
-    --branch = branch,
+    branch = branch,
     mount = mount,
     create = create,
     source = source,
@@ -115,7 +118,7 @@ local vide = {
 setmetatable(vide :: any, {
     __index = function(_, index: unknown): ()
         if flags[index] == nil then
-            error(`{tostring(index)} is not a valid member of vide`, 0)
+            error(`{tostring(index)} is not a valid member of vide`, 2)
         else
             return flags[index]
         end
@@ -123,7 +126,7 @@ setmetatable(vide :: any, {
 
     __newindex = function(_, index: unknown, value: unknown)
         if flags[index] == nil then
-            error(`{tostring(index)} is not a valid member of vide, 0`)
+            error(`{tostring(index)} is not a valid member of vide`, 2)
         else
             flags[index] = value
         end

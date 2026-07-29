@@ -78,7 +78,7 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 continue
             end
 
-            if type(value) == "function" then 
+            if type(value) == "function" then
                 if typeof((instance :: any)[property]) == "RBXScriptSignal" then
                     table.insert(cache.events, property) -- add event name to buffer
                     table.insert(cache.events, value :: () -> ()) -- add event listener to buffer
@@ -87,7 +87,7 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 end
             else
                 (instance :: any)[property] = value -- set property
-            end    
+            end
         elseif type(property) == "number" then
             if type(value) == "function" then
                 implicit_effect.children(instance, value :: () -> ArrayOrV<Instance>) -- bind children
@@ -103,6 +103,8 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
             elseif type(value) == "userdata" then
                 (value :: Instance).Parent = instance -- parent child
             end
+        else
+            error(`Invalid property '{tostring(property)}'`, 0)
         end
     end
 end

@@ -59,7 +59,7 @@ local type_to_vec6 = {
     UDim = function(v)
         return vector.create(v.Scale, v.Offset, 0), vector.zero
     end :: TypeToVec6<UDim>,
-    
+
     UDim2 = function(v)
         return vector.create(v.X.Scale, v.X.Offset, v.Y.Scale), vector.create(v.Y.Offset, 0, 0)
     end :: TypeToVec6<UDim2>,
@@ -97,7 +97,7 @@ local vec6_to_type = {
     UDim = function(v)
         return UDim.new(v.X, math.round(v.Y))
     end :: Vec6ToType<UDim>,
-    
+
     UDim2 = function(a, b)
         return UDim2.new(a.X, math.round(a.Y), a.Z, math.round(b.X))
     end :: Vec6ToType<UDim2>,
@@ -121,7 +121,7 @@ local vec6_to_type = {
 
 local invalid_type = {
     __index = function(_, t: string)
-        error(`cannot spring type {t}`, 0)
+        error(`cannot spring type {t}`, 2)
     end
 }
 
@@ -146,7 +146,7 @@ local function spring<T>(source: () -> T, period: number?, damping_ratio: number
     -- todo: is there a solution other than reducing step size?
     -- todo: this does not catch all solver exploding cases
     if c > UPDATE_RATE*2 then -- solver will explode if this is true
-        error("spring damping too high, consider reducing damping or increasing period", 0)
+        error("spring damping too high, consider reducing damping or increasing period", 2)
     end
 
     local data: SpringState<T> = {
@@ -165,7 +165,7 @@ local function spring<T>(source: () -> T, period: number?, damping_ratio: number
 
         source_value = false :: any,
     }
-    
+
     local output = create_source_node(false :: any)
 
     local function updater_effect()

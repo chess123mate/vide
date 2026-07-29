@@ -17,7 +17,7 @@ local function batch(setter: () -> ())
         graph.flush_update_queue(from)
     end
 
-    if not ok then error(`error occured while batching updates: {err}`, 0) end
+    if not ok then error(`error occured while batching updates: {err}`, 2) end
 end
 
 return batch

@@ -9,12 +9,12 @@ local get_scope = graph.get_scope
 local function branch<T>(fn: () -> T): (() -> (), T)
     local current = get_scope()
     if not current then
-        error(`cannot use branch() outside a stable or reactive scope`, 0)
+        error(`cannot use branch() outside a stable or reactive scope`, 2)
     end
 
     local parent = current.owner
     if not parent then
-        error(`current scope is not owned by a scope`, 0)
+        error(`current scope is not owned by a scope`, 2)
     end
 
     local node = create_node(parent, false, false)
@@ -31,7 +31,7 @@ local function branch<T>(fn: () -> T): (() -> (), T)
 
     if not ok then
         destroy()
-        error(`error while running branch():\n\n{result}`, 0)
+        error(`error while running branch():\n\n{result}`, 2)
     end
 
     return destroy, result

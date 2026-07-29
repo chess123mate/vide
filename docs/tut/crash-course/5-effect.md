@@ -26,7 +26,7 @@ that source is updated.
 The effect runs its callback once immediately to initially figure out what
 sources are being read.
 
-Derived sources are also tracked, it does not matter how deeply nested
+Derived sources are also tracked; it does not matter how deeply nested
 inside a function a source is.
 
 ```luau

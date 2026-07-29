@@ -1,20 +1,20 @@
 local apply = require "./apply"
 local flags = require "./flags"
 
-local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?): unknown
+local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?, children: {unknown}?): unknown
     local type_ = typeof(class_or_instance)
     if type_ ~= "string" and type_ ~= "Instance" then
         error("create argument #1, expected string or instance, got " .. type_, 2)
     end
-    if not properties then
+    if not properties and not children then
         error("create argument #2, missing properties", 2)
     end
 
     if type_ == "string" then
-        return apply(Instance.new(class_or_instance :: any), properties)
+        return apply(Instance.new(class_or_instance :: any), properties, children)
     else
         local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
-        return apply(clone, properties)
+        return apply(clone, properties, children)
     end
 end
 

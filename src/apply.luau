@@ -36,7 +36,6 @@ type Cache = {
 }
 
 local free_cache: Cache?
-
 local function borrow_cache(): Cache
     if free_cache then
         local cache = free_cache
@@ -55,10 +54,6 @@ local function borrow_cache(): Cache
             nested_stack = {}
         }
     end
-end
-
-local function return_cache(cache: Cache )
-    free_cache = cache
 end
 
 local function process_properties(properties: Map<unknown, unknown>, instance: Instance, cache: Cache, depth: number)
@@ -108,12 +103,17 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
 end
 
 -- applies table of nested properties to an instance using full vide semantics
-local function apply<T>(instance: T & Instance, properties: { [unknown]: unknown }): T
+local function apply<T>(instance: T & Instance, properties: {}?, children: { unknown }?): T
     if not instance then
         error("attempt to call apply with no instance", 2)
     end
     if not properties then
-        error("attempt to call apply with no properties", 2)
+        if not children then
+            error("attempt to call apply with no properties and no children", 2)
+        end
+        properties = children :: { [unknown]: unknown }
+    elseif children then
+        table.insert(properties :: any, children)
     end
 
     local caches = borrow_cache()
@@ -125,7 +125,7 @@ local function apply<T>(instance: T & Instance, properties: { [unknown]: unknown
     -- process all properties
     local depth = 1
     repeat
-        process_properties(properties, instance, caches, depth)
+        process_properties(properties :: any, instance, caches, depth)
         depth = table.remove(nested_stack) :: number
         properties = table.remove(nested_stack) :: {}
     until not properties
@@ -147,7 +147,7 @@ local function apply<T>(instance: T & Instance, properties: { [unknown]: unknown
         if type(parent) == "function" then
             implicit_effect.parent(instance, parent :: () -> Instance)
         else
-            instance.Parent = parent :: Instance
+            (instance :: Instance).Parent = parent :: Instance
         end
     end
 
@@ -157,7 +157,7 @@ local function apply<T>(instance: T & Instance, properties: { [unknown]: unknown
     if flags.strict then table.clear(nested_debug) end
     table.clear(nested_stack)
 
-    return_cache(caches)
+    free_cache = caches -- return cache
 
     return instance
 end

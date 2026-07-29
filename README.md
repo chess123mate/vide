@@ -1,4 +1,8 @@
-<br>
+## Changes compared to other forks
+
+- meant for use in Roblox-TS only (timeout removed)
+- `defaults` removed
+- apply and create use `(instance, props, children)` (props and children are effectively the same thing but separated for Typescript purposes)
 
 <div align="center">
     <img src="docs/public/full_logo.svg" width="600" />

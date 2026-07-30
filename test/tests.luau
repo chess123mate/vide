@@ -2840,14 +2840,14 @@ TEST("graph edge cases", wrap_root(function()
         CHECK(count.b == 2)
         CHECK(count.c == 2)
         CHECK(count.d == 2)
-        CHECK(count.e == 3) -- todo: redundant re-eval
+        CHECK(count.e == 2)
         CHECK(e() == 4)
 
         a(3)
         CHECK(count.b == 2)
         CHECK(count.c == 3)
         CHECK(count.d == 3)
-        CHECK(count.e == 4)
+        CHECK(count.e == 3)
         CHECK(e() == 12)
     end
 

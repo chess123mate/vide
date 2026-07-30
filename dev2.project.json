@@ -10,6 +10,12 @@
 			"vide": {
 				"$path": "src"
 			}
+		},
+		"TestService": {
+			"$className": "TestService",
+			"test": {
+				"$path": "test2",
+			}
 		}
 	}
 }

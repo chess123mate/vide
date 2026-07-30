@@ -1,3 +1,4 @@
+local batch = require "./batch"
 local graph = require "./graph"
 type Node<T> = graph.Node<T>
 type SourceNode<T> = graph.SourceNode<T>
@@ -323,6 +324,6 @@ return function()
             step_springs(1 / UPDATE_RATE)
         end
 
-        update_spring_sources()
+        batch(update_spring_sources)
     end
 end

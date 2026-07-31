@@ -3,7 +3,7 @@ local get_scope = graph.get_scope
 local push_cleanup = graph.push_cleanup
 
 local function cleanup(value: unknown)
-    local scope = get_scope() or error("cannot cleanup outside a stable or reactive scope", 2)
+    local scope = get_scope() or error("cannot call cleanup() outside a scope", 2)
 
     local type_ = typeof(value)
     push_cleanup(scope,

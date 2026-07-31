@@ -11,10 +11,10 @@ local function create(class_or_instance: string|Instance, properties: { [unknown
     end
 
     if type_ == "string" then
-        return apply(Instance.new(class_or_instance :: any), properties, children)
+        return apply(Instance.new(class_or_instance :: any), properties, children, true)
     else
         local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
-        return apply(clone, properties, children)
+        return apply(clone, properties, children, true)
     end
 end
 

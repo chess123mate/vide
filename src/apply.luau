@@ -2,6 +2,9 @@ local flags = require "./flags"
 local implicit_effect = require "./implicit_effect"
 local _, is_action = require "./action"()
 local graph = require "./graph"
+local register_destroy = graph.register_destroy
+local get_scope = graph.get_scope
+local push_cleanup = graph.push_cleanup
 type Node<T> = graph.Node<T>
 
 type Array<V> = { V }
@@ -36,6 +39,13 @@ type Cache = {
 }
 
 local free_cache: Cache?
+local cache_lazy_init_mt = {
+    __index = function(self, i)
+        local t = {}
+        self[i] = t
+        return t
+    end
+}
 local function borrow_cache(): Cache
     if free_cache then
         local cache = free_cache
@@ -44,26 +54,29 @@ local function borrow_cache(): Cache
     else
         return {
             events = {},
-            actions = setmetatable({} :: any, { -- lazy init
-                __index = function(self, i) self[i] = {}; return self[i] end
-            }),
+            actions = setmetatable({} :: any, cache_lazy_init_mt),
             parent = nil,
-            nested_debug = setmetatable({} :: any, {
-                __index = function(self, i: number) self[i] = {}; return self[i] end
-            }),
+            nested_debug = flags.strict and setmetatable({} :: any, cache_lazy_init_mt),
             nested_stack = {}
         }
     end
 end
 
 local function process_properties(properties: Map<unknown, unknown>, instance: Instance, cache: Cache, depth: number)
+    local strict = flags.strict
     for property, value in properties do
         if type(property) == "string" then
-            if flags.strict then -- check for duplicate property assignment at nesting depth
-                if cache.nested_debug[depth][property] then
+            if strict then -- check for duplicate property assignment at nesting depth
+                local nested_debug = cache.nested_debug
+                if not nested_debug then
+                    -- This can happen if we switched from non-strict to strict mode (typically in testing)
+                    nested_debug = setmetatable({} :: any, cache_lazy_init_mt)
+                    cache.nested_debug = nested_debug
+                end
+                if nested_debug[depth][property] then
                     error(`duplicate property {property} at depth {depth}`, 0)
                 end
-                cache.nested_debug[depth][property] = true
+                nested_debug[depth][property] = true
             end
 
             if property == "Parent" then
@@ -103,7 +116,7 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
 end
 
 -- applies table of nested properties to an instance using full vide semantics
-local function apply<T>(instance: T & Instance, properties: {}?, children: { unknown }?): T
+local function apply<T>(instance: T & Instance, properties: {}?, children: { unknown }?, destroy: boolean): T
     if not instance then
         error("attempt to call apply with no instance", 2)
     end
@@ -115,34 +128,38 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
     elseif children then
         table.insert(properties :: any, children)
     end
+    local scope = get_scope()
 
-    local caches = borrow_cache()
-    local events = caches.events
-    local actions = caches.actions
-    local nested_debug = caches.nested_debug
-    local nested_stack = caches.nested_stack
+    local cache = borrow_cache()
+    local events = cache.events
+    local actions = cache.actions
+    local nested_stack = cache.nested_stack
 
     -- process all properties
     local depth = 1
     repeat
-        process_properties(properties :: any, instance, caches, depth)
+        process_properties(properties :: any, instance, cache, depth)
         depth = table.remove(nested_stack) :: number
         properties = table.remove(nested_stack) :: {}
     until not properties
 
-    for i = 1, #events, 2 do
+    local num_events = #events
+    local cons = num_events > 0 and table.create(num_events / 2)
+    for i = 1, num_events, 2 do
         local event_name = events[i]
         local event_listener = events[i + 1]
-        ;(instance :: any)[event_name]:Connect(event_listener)
+        table.insert(cons, (instance :: any)[event_name]:Connect(event_listener))
     end
+    table.clear(events)
 
     for _, queued in actions do
         for _, callback in queued do
             callback(instance)
         end
     end
+    table.clear(actions)
 
-    local parent = caches.parent
+    local parent = cache.parent
     if parent then
         if type(parent) == "function" then
             implicit_effect.parent(instance, parent :: () -> Instance)
@@ -151,13 +168,35 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
         end
     end
 
-    table.clear(events)
-    for _, queued in actions do table.clear(queued) end
-    caches.parent = nil
-    if flags.strict then table.clear(nested_debug) end
+    local clean = if destroy
+        then function() instance:Destroy() end
+        else function()
+            if cons then
+                for _, con in cons do
+                    con:Disconnect()
+                end
+            end
+            if parent then
+                instance.Parent = nil
+            end
+        end
+    if scope then
+        push_cleanup(scope, clean)
+    elseif cons then
+        clean()
+        error("create/apply with arguments requiring cleanup, but called without a scope", 2)
+    end
+
+    cache.parent = nil
+    if flags.strict then
+        local nested_debug = cache.nested_debug
+        if nested_debug then
+            table.clear(nested_debug)
+        end
+    end
     table.clear(nested_stack)
 
-    free_cache = caches -- return cache
+    free_cache = cache -- return cache
 
     return instance
 end

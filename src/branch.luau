@@ -7,8 +7,8 @@ local destroy = graph.destroy
 local get_scope = graph.get_scope
 
 local function branch<T>(fn: () -> T, ...): (() -> (), T)
-    local current = get_scope() or error(`cannot use branch() outside a stable or reactive scope`, 2)
-    local parent = current.owner or error(`current scope is not owned by a scope`, 2)
+    local current = get_scope() or error(`cannot use branch() outside a scope`, 2)
+    local parent = current.owner or error(`cannot use branch() when current scope is not owned by a scope`, 2)
 
     local node = create_node(parent, false, false)
 

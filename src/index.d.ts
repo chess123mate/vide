@@ -5,39 +5,22 @@ export = Vide
 export as namespace Vide
 
 declare namespace Vide {
-	/** Scope rules:
-	 *
-	 * - `root` & `mount` create a stable scope
-	 * - `create` & `apply` require a stable scope
-	 * - `effect` & `derive` require any scope -> create a reactive scope
-	 * - `cleanup` requires any scope
-	 * - `branch` requires a stable *parent* scope -> creates a stable scope
-	 * - `untrack` temporarily treats the current scope as stable (if there is a scope)
-	 */
-	const ScopeTutorial: void
-
-	/** A reactive state container that can be read and updated. Calling the source
+	/** A state container that can be read and updated. Calling the source
 	 * with no arguments will return the stored value, whereas calling it with an
 	 * argument (including `undefined`) will update the stored value.
 	 * @param value The new value to store.
 	 * @returns The current value. */
 	type Source<T> = (value?: T) => T
 
-	/** A value that can be either a reactive source property or a static value.
-	 * Useful for defining component props that can be either static or dynamic. \
+	/** A source that you can read from (but not necessarily write to). */
+	type RSource<T> = () => T
+
+	/** A value that can be either a source property or a static value. \
 	 * Use `read` to read from such values. */
 	type Derivable<T> = T | (() => T)
 
-	/** A function component that renders a Vide node.
-	 * @param props Properties passed to the component.
-	 * @returns The rendered node. */
-	type jsxComponent<Props = {}> = (props: Props) => jsxNode
-
-	/** Utility type for a component that accepts `children` as a prop. */
-	type PropsWithChildren<Props = {}> = Props & { children?: jsxNode }
-
 	/** An object containing the custom logic to invoke when an instance is
-	 * created. Created using `action()` or using the special `action` prop. */
+	 * created. Created using `action()` */
 	interface Action<T extends Instance> {
 		priority: number
 		callback: (instance: T) => void
@@ -61,6 +44,13 @@ declare namespace Vide {
 	 * seconds before being destroyed. */
 	type MaybeDelayed<T> = T | LuaTuple<[T, number?]>
 
+	/** `fn as AssumeDelayed<typeof fn>` will cast the function to use the LuaTuple variant of MaybeDelayed. */
+	type AssumeDelayed<Fn> = Fn extends (
+		...args: infer Args
+	) => MaybeDelayed<infer T>
+		? (...args: Args) => LuaTuple<[T, number | undefined]>
+		: never;
+
 	/** Strict mode is designed to help the development process by adding
 	 * safety checks and identifying improper usage.
 	 *
@@ -75,42 +65,47 @@ declare namespace Vide {
 	 *
 	 * @see https://centau.github.io/vide/api/strict-mode */
 	let strict: boolean
+	/** If true, in apply calls, nested properties are assigned after non-nested ones. */
 	let defer_nested_properties: boolean
+	/** Defaults to true. Set to false if you want to be able to destroy a root node multiple times (repeated destruction has no effect but may imply a bug). */
+	let warn_on_repeated_root_destroy: boolean
 
-	/** Creates a new stable scope, where creation of effects can be tracked
+	/** Creates a new scope, where creation of effects can be tracked
 	 * and properly disposed of. Returns the result of the given function.
 	 *
 	 * A function to destroy the root is passed into the callback, which will
 	 * run any cleanups and allow derived sources to garbage collect.
 	 *
-	 * @param fn The function to run in a new stable scope.
+	 * @param fn The function to run in a new scope.
+	 * @param args Arguments to pass to `fn`
 	 *
-	 * @returns The results of the function.
+	 * @returns The destroy function, followed by the results of the function.
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-core#root */
 	// Note: having an overload for `fn` to return void and thus root to return just `Cleanup` fail when in a generic function, or when using void (or not void, depending on if you try to put the void definition first or last)
-	function root<T extends unknown[]>(fn: (destroy: Cleanup) => LuaTuple<T>): LuaTuple<[Cleanup, ...T]>
-	function root<T>(fn: (destroy: Cleanup) => T): LuaTuple<[Cleanup, T]>
+	function root<T extends unknown[], Args extends unknown[]>(fn: (destroy: Cleanup, ...args: Args) => LuaTuple<T>, ...args: Args): LuaTuple<[Cleanup, ...T]>
+	function root<T, Args extends unknown[]>(fn: (destroy: Cleanup, ...args: Args) => T, ...args: Args): LuaTuple<[Cleanup, T]>
 
-	/** Runs a function in a new stable scope and optionally applies its result to a target instance.
+	/** Runs a function in a new scope, setting the result's `Parent` to `target`.
 	 *
-	 * The result of the function has `apply(target, [result])` called on it; additionally, if the result is an Instance, it is deparented on cleanup.
-	 *
-	 * @param component The function to run in a new stable scope.
+	 * @param component The function to run in a new scope.
 	 * @param target The target instance to apply the result to.
+	 * @param args Arguments to pass to the component constructor
 	 *
-	 * @returns A function to destroy the stable scope.
+	 * @returns A function to destroy the scope.
 	 *
 	 * @see https://centau.github.io/vide/api/creation#mount */
-	function mount<T>(component: T extends void ? never : () => T, target: Instance): Cleanup
+	function mount<T, Args extends unknown[]>(component: T extends void ? never : (...args: Args) => T, target: Instance, ...args: Args): LuaTuple<[Cleanup, T]>
 
-	/** Creates or clones a new instance and applies any given properties.
+	/** Creates or clones a new instance and applies any given properties & children.
 	 *
-	 * Must be in a stable scope.
+	 * Be cautious calling this in an effect/derive call, as this will trigger the creation of new instances every time the state changes. Prefer to use `apply` with an object pool or create the instance in a manually controlled scope with `root`/`branch`.
+	 *
+	 * Note that the instance is destroyed on cleanup.
 	 *
 	 * @param className The class name of the instance to create, or an instance to clone.
-	 * @param props The properties to apply to the new instance.
-	 * @param children The list of children (added onto props; this is here for Typescript support)
+	 * @param props The properties to apply to the new instance. Property values can point to sources.
+	 * @param children The list of children and/or sources of properties and/or children (and/or more sources). You could pass this in with `props` instead, but this is here for TS-convenience (so you should use `{}` for props and `[]` for children).
 	 *
 	 * @see https://centau.github.io/vide/api/creation#create */
 	function create<K extends keyof CreatableInstances>(
@@ -119,22 +114,20 @@ declare namespace Vide {
 		children?: Node<CreatableInstances[K]>[],
 	): CreatableInstances[K]
 
-	/** Creates a reactive state container that can be read and updated (from anywhere - being in a scope is not required).
+	/** Creates a state container that can be read and updated (from anywhere - being in a scope is not required).
 	 * Calling the source with no arguments will return the stored value, whereas calling
 	 * it with an argument (including `undefined`) will update the stored value.
 	 *
-	 * Sources can be passed directly to `create()` to create a reactive instance property.
-	 *
-	 * @param initialValue The initial value to store.
+	 * Accessing the value while in an effect/derive call will track the dependency unless you read the value with `untrack`.
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-core#source */
 	function source<T>(initialValue: T): Source<T>
 	// convenience overload for when the initial value is optional
 	function source<T>(): Source<T | undefined>
 
-	/** Runs a side-effect in a new reactive scope when any of its dependencies
+	/** Runs a side-effect in a new scope when any of its dependencies
 	 * change. Any time a source referenced in the callback is updated, the
-	 * callback will be reran. The callback is ran once immediately.
+	 * callback will be rerun. The callback is run once immediately.
 	 *
 	 * Optionally, the callback can return a value that will be passed during
 	 * the next rerun. This can be useful for comparing values between runs.
@@ -151,14 +144,14 @@ declare namespace Vide {
 	// overload where callback stores a value between runs
 	function effect<T>(callback: (value: T) => T, initialValue: T): void
 
-	/** Derives a new source in a new reactive scope from existing sources. The
+	/** Derives a new source in a new scope from existing sources. The
 	 * derived source will have its value recalculated and cached when any source
 	 * it derives from is updated.
 	 *
 	 * Must be called in a scope.
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-core#derive */
-	function derive<T>(source: () => T): () => T
+	function derive<T>(source: () => T): RSource<T>
 
 	/** Shows one of a set of components depending on an input source and a
 	 * mapping table. Returns a source holding an instance of the currently
@@ -166,8 +159,8 @@ declare namespace Vide {
 	 *
 	 * When the input source changes, the new value will be used to lookup a
 	 * given mapping table to get a component. During the next change, the
-	 * stable scope the component was created in will be destroyed, and a new
-	 * component created under a new stable scope.
+	 * scope the component was created in will be destroyed, and a new
+	 * component created under a new scope.
 	 *
 	 * @param source The source to match against.
 	 * @param map The mapping table of components.
@@ -176,7 +169,7 @@ declare namespace Vide {
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-flow#switch */
 	// switch is a reserved keyword
-	function match<Match extends Key, Result extends jsxNode>(
+	function match<Match extends Key, Result>(
 		source: () => Match,
 	): (map: { [P in Match]?: (show: () => boolean) => MaybeDelayed<Result> }) => () => Result | undefined
 
@@ -184,8 +177,8 @@ declare namespace Vide {
 	 * holding an instance of the currently rendered component.
 	 *
 	 * When the input source changes from a falsey to a truthy value, the
-	 * component will be reran under a new stable scope. If it changes from
-	 * a truthy to falsey value, the stable scope the component was created
+	 * component will be reran under a new scope. If it changes from
+	 * a truthy to falsey value, the scope the component was created
 	 * in will be destroyed, and the returned source will output `nil`, or
 	 * a fallback component if given.
 	 *
@@ -216,9 +209,9 @@ declare namespace Vide {
 	 *
 	 * When the input source changes, each key in the new table is compared with
 	 * the last input table.
-	 * - For any new key, the transform function is ran under a new stable scope
+	 * - For any new key, the transform function is ran under a new scope
 	 *   to produce a new instance.
-	 * - For any removed key, the stable scope for that key is destroyed.
+	 * - For any removed key, the scope for that key is destroyed.
 	 * - Keys whose values have changed will be untouched.
 	 *
 	 * @param input The table source to map over.
@@ -248,9 +241,9 @@ declare namespace Vide {
 	 *
 	 * When the input source changes, each value in the new table is compared
 	 * with the last input table.
-	 * - For any new value, the transform function is ran under a new stable
+	 * - For any new value, the transform function is run under a new
 	 *   scope to produce a new instance.
-	 * - For any removed value, the stable scope for that value is destroyed.
+	 * - For any removed value, the scope for that value is destroyed.
 	 * - Values whose keys have changed will be untouched.
 	 *
 	 * **CAUTION:** Having primitive values in the input source table can cause
@@ -286,11 +279,7 @@ declare namespace Vide {
 	 * @see https://centau.github.io/vide/api/reactivity-utility#cleanup */
 	function cleanup(value: Disposable): void
 
-	/** Turns the current scope (if any) stable for the duration of the `source` call. Thus, you can read from sources without tracking them.
-	 *
-	 * @param source The source to read from, or the callback to run.
-	 *
-	 * @returns The value of the source.
+	/** Reads from `source` without tracking it.
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-utility#untrack */
 	function untrack<T>(source: () => T): T
@@ -302,40 +291,38 @@ declare namespace Vide {
 	 * @see https://centau.github.io/vide/api/reactivity-utility#read */
 	function read<T>(source: Derivable<T>): T
 
-	/** Runs a given function where any source updates made within the function
-	 * do not trigger effects until after the function finishes running.
+	/** Runs `setter`, delaying processing the effects of any source updates until `setter` is done.
+	 *
+	 * Note: at this time, if you change a source and then revert the change within the batch call, triggered effects will still reprocess once (instead of cancelling).
 	 *
 	 * @param setter The function to run.
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-utility#batch */
 	function batch(setter: () => void): void
 
-	/** Returns a new source with a value always moving towards the input source
-	 * value. The spring will oscillate around the input value until it reaches
-	 * equilibrium.
+	/** Returns a new source with a value always moving towards the `goal`. The spring will oscillate around the input value until it reaches equilibrium.
 	 *
 	 * @param period The time in seconds it takes for the spring to complete one
-	 * full cycle if undamped.
+	 * full cycle if undamped. For a dampingRatio of 1.0, you can expect the spring to get 98% of the way there within `period` and to settle within `2 * period`.
 	 * @param dampingRatio The amount of resistance applied to the spring.
 	 *
-	 * @returns A tuple containing the spring value source and a configuration
-	 * function to set the spring's position, velocity, and apply impulses.
+	 * @returns A tuple containing the spring value source (which you can modify to set the position) and a configuration function to set the spring's position, velocity, and/or to apply impulses.
 	 *
 	 * @see https://centau.github.io/vide/api/animation#spring */
 	function spring<T extends Animatable>(
-		source: () => T,
+		goal: Derivable<T>,
 		period?: number,
 		dampingRatio?: number,
-	): LuaTuple<[value: () => T, config: (config: { position?: T; velocity?: T; impulse?: T }) => void]>
+	): LuaTuple<[value: Source<T>, config: (config: SpringConfig<T>) => void]>
 
-	/** Creates an Action that can be passed to `create()` to invoke custom
+	type SpringConfig<T extends Animatable> = { position?: T; velocity?: T; impulse?: T }
+
+	/** Creates an Action that can be passed to `create`/`apply` to invoke custom
 	 * actions on instances. The callback will be invoked when the instance is
 	 * created, after properties and children are applied.
 	 *
-	 * @param callback The function to run when the instance is created.
+	 * @param callback The function to run when the instance is created. If you need to react to state changes, use `effect` inside the callback.
 	 * @param priority The priority of the action. Higher priorities run first.
-	 *
-	 * @returns An action object.
 	 *
 	 * @see https://centau.github.io/vide/api/creation#action */
 	function action<T extends Instance>(callback: (instance: T) => void, priority?: number): Action<T>
@@ -349,25 +336,21 @@ declare namespace Vide {
 	 * @param key The property to watch for changes.
 	 * @param callback The function to run when the property changes.
 	 *
-	 * @returns An action object.
-	 *
 	 * @see https://centau.github.io/vide/api/creation#changed */
 	function changed<T extends Instance, K extends keyof WritableInstanceProperties<T>>(
 		key: K,
 		callback: (value: WritableInstanceProperties<T>[K]) => void,
 	): Action<T>
 
-	/** Applies properties to an existing instance. Similarly to `create()`, the
-	 * properties can be either static values or reactive sources.
-	 *
-	 * Must be in a stable scope.
+	/** Applies properties and children to an existing instance.
 	 *
 	 * @param instance The instance to apply properties to.
-	 * @param props The properties to apply to the instance.
-	 * @param children The list of children (added onto props; this is here for Typescript support)
+	 * @param props The properties to apply to the new instance. Property values can point to sources.
+	 * @param children The list of children and/or sources of properties and/or children (and/or more sources). You could pass this in with `props` instead, but this is here for TS-convenience (so you can use `[]`).
+	 * @param destroy If true, on cleanup will destroy `instance` instead of deparenting it
 	 *
 	 * @returns The instance with the properties applied. */
-	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: Node<T>[]): T
+	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: Node<T>[], destroy?: boolean): T
 
 	/** By default, springs run at 120 Hz in the `Heartbeat` event. Calling this
 	 * function can change when the solver runs, which will advance the simulation
@@ -383,7 +366,7 @@ declare namespace Vide {
 
 	/** Create a stable sibling "branch scope" to the current scope.
 	 *
-	 * Must be called inside a scope where the parent is a stable scope. For example, you can call this while in an `effect` call.
+	 * Must be called inside a scope where the parent is a scope. For example, you can call this while in an `effect` call.
 	 *
 	 * Very similar to root, except that the branch is automatically cleaned up with the parent scope, so you don't need to say `cleanup(destroyBranch)`.
 	 * @param args The arguments to send to `fn` */
@@ -393,157 +376,15 @@ declare namespace Vide {
 	): LuaTuple<[Cleanup, ...T]>
 	function branch<T, Args extends any[]>(fn: (...args: Args) => T, ...args: Args): LuaTuple<[Cleanup, T]>
 
-	// Components
-
-	/** A blank element that can be used to group multiple elements together.
-	 * Identical to passing an array of instances to `create()`. */
-	function Fragment<T>(props: T): T
-
-	/** Maps each _value_ in a table source to a component. Returns a source
-	 * holding an array of the rendered components.
-	 *
-	 * When the input source changes, each value in the new table is compared
-	 * with the last input table.
-	 * - For any new value, the function is ran under a new stable scope to
-	 *   produce a new instance.
-	 * - For any removed value, the stable scope for that value is destroyed.
-	 * - Values whose keys have changed will be untouched.
-	 *
-	 * @example
-	 * ```tsx
-	 * <For each={() => ["a", "b", "c"]}>
-	 *   {(id: string, index: () => number) => <Entry id={id} />}
-	 * </For>
-	 * ```
-	 *
-	 * @param each The table source to map over.
-	 * @param children The function to transform each value in the table.
-	 *
-	 * @returns A function that returns an array of the rendered components.
-	 *
-	 * @see https://centau.github.io/vide/api/reactivity-flow#values */
-	// overload for an array input
-	function For<VI, VO extends jsxNode | void>(props: {
-		each: () => readonly VI[]
-		children: (item: VI, index: () => number, show: () => boolean) => MaybeDelayed<VO>
-	}): () => VO[]
-	// overload for a map input
-	function For<K, VI, VO extends jsxNode | void>(props: {
-		each: () => Map<K, VI> | ReadonlyMap<K, VI>
-		children: (value: VI, key: () => K) => MaybeDelayed<VO>
-	}): () => VO[]
-	// overload for an object input
-	function For<K extends Key, VI, VO extends jsxNode | void>(props: {
-		each: () => { readonly [P in K]: VI }
-		children: (value: VI, key: () => K) => MaybeDelayed<VO>
-	}): () => VO[]
-
-	/** Maps each _key_ in a table source to a component. Returns a source holding
-	 * an array of the rendered components.
-	 *
-	 * When the input source changes, each key in the new table is compared with
-	 * the last input table.
-	 * - For any new key, the function is ran under a new stable scope to produce
-	 *   a new instance.
-	 * - For any removed key, the stable scope for that key is destroyed.
-	 * - Keys whose values have changed will be untouched.
-	 *
-	 * @example
-	 * ```tsx
-	 * <Index each={() => new Map<string, Data>()}>
-	 *   {(data: () => Data, id: string) => <Entry data={data} />}
-	 * </Index>
-	 * ```
-	 *
-	 * @param each The table source to map over.
-	 * @param children The function to transform each value in the table.
-	 *
-	 * @returns A function that returns an array of the rendered components.
-	 *
-	 * @see https://centau.github.io/vide/api/reactivity-flow#indexes */
-	// overload for an array input
-	function Index<VI, VO extends jsxNode | void>(props: {
-		each: () => readonly VI[]
-		children: (item: () => VI, index: number, show: () => boolean) => MaybeDelayed<VO>
-	}): () => VO[]
-	// overload for a map input
-	function Index<K, VI, VO extends jsxNode | void>(props: {
-		each: () => Map<K, VI> | ReadonlyMap<K, VI>
-		children: (value: () => VI, key: K) => MaybeDelayed<VO>
-	}): () => VO[]
-	// overload for an object input
-	function Index<K extends Key, VI, VO extends jsxNode | void>(props: {
-		each: () => { readonly [P in K]: VI }
-		children: (value: () => VI, key: K) => MaybeDelayed<VO>
-	}): () => VO[]
-
-	/** Shows one of a set of components depending on an input source and a
-	 * set of `Case` components. Renders the `Case` component that matches
-	 * the input source.
-	 *
-	 * @example
-	 * ```tsx
-	 * <Switch condition={state}>
-	 *   <Case<State> match="loading">{() => <Loading }/></Case>
-	 *   <Case<State> match="error">{() => <Error />}</Case>
-	 *   <Case<State> match="success">{() => <Success }/></Case>
-	 * </Switch>
-	 * ```
-	 *
-	 * @param condition The source to match against.
-	 * @param children The `Case` components to render.
-	 *
-	 * @returns The currently rendered component.
-	 *
-	 * @see https://centau.github.io/vide/api/reactivity-flow#switch */
-	function Switch(props: { condition: () => any; children: jsxNode }): () => jsxNode
-
-	/** Declares a component that will be rendered when the `condition` prop
-	 * of the `Switch` component matches this component's `match` prop.
-	 *
-	 * @template T The type of the value to match against.
-	 *
-	 * @param match The value to match against.
-	 * @param children The component to render when the value matches.
-	 *
-	 * @returns The rendered component.
-	 *
-	 * @see Switch */
-	function Case<T>(props: { match: T; children: (show: () => boolean) => MaybeDelayed<jsxNode> | void }): jsxNode
-
-	/** Shows one of two components depending on an input source. Renders the
-	 * first component when the source is truthy, and the second component
-	 * when the source is falsey.
-	 *
-	 * @example
-	 * ```tsx
-	 * <Show when={state} fallback={() => <Loading />}>
-	 *   {(show) => <Content />}
-	 * </Show>
-	 * ```
-	 *
-	 * @param when The source to match against.
-	 * @param children The component to render when the source is truthy.
-	 * @param fallback The component to render when the source is falsey.
-	 *
-	 * @returns The rendered component.
-	 *
-	 * @see https://centau.github.io/vide/api/reactivity-flow#show */
-	function Show<Condition>(props: {
-		when: () => Condition
-		children: (value: () => NonNullable<Condition>, show: () => boolean) => MaybeDelayed<jsxNode> | void
-		fallback?: (show: () => boolean) => MaybeDelayed<jsxNode> | void
-	}): () => jsxNode
-
 	// Context
 
 	interface Context<T> {
 		/** Get the context's value.
 		 *
-		 * (Note that this operation is slow, so don't read from it repeatedly.) */
+		 * (Note that this operation is not O(1), so don't read from it repeatedly.) */
 		(): T
 		/** Set the context's value for the duration of `component`. Only valid while inside a scope. */
-		<U extends jsxNode | void>(value: T, component: () => U): U
+		<U>(value: T, component: () => U): U extends LuaTuple<any> ? never : U
 	}
 
 	/** Creates a new context that can be used to customize components. Useful to avoid passing configuration parameters through many intermediate/nested components.
@@ -562,64 +403,30 @@ declare namespace Vide {
 	 * @param defaultValue The default value to store in the context. */
 	function context<T>(defaultValue?: T): Context<T>
 
-	/** Renders a component with a new value in the context. The value will be
-	 * passed to any components that read from the context within the component.
-	 *
-	 * **Note:** The context function must be called within the top-level of a
-	 * component. Calling it within an effect or on a new thread will return the
-	 * default value.
-	 *
-	 * @example
-	 * ```tsx
-	 * const theme = context("light")
-	 *
-	 * <Provider context={theme} value="dark">
-	 *   {() => <textlabel Text={theme()} />}
-	 * </Provider>
-	 * ```
-	 *
-	 * @param context The context to pass `children` to.
-	 * @param value The new value to store in the context.
-	 * @param children The component to render with the new context value.
-	 *
-	 * @returns The rendered component. */
-	function Provider<T>(props: { context: Context<T>; value: T; children: () => jsxNode | void }): () => jsxNode
-
 	// Elements
 
-	/** A value that can be passed to a JSX element. */
-	type jsxNode = Instance | InstanceAttributes<Instance> | Action<any> | FragmentNode | FunctionNode | undefined
-
+	/*
+	function create<K extends keyof CreatableInstances>(
+		className: K,
+		props?: InstanceProps<CreatableInstances[K]> | Node<CreatableInstances[K]>[],
+		children?: Node<CreatableInstances[K]>[],
+	): CreatableInstances[K]
+	*/
 	/** A value that can be passed to the `create()` function.
 	 * @template T The type of instance to create. */
 	export type Node<T extends Instance> =
-		| Instance
-		| InstanceAttributes<T>
+		| InstanceProps<T>
 		| Action<T>
-		| FragmentNode
-		| FunctionNode
-		| undefined
+		| (() => Node<T> | undefined)
+		| Instance
+		| Nodes<T>
 
-	/** A value that contains a collection of nodes. Vide unwraps these values
-	 * when rendering, allowing for nested arrays to be passed as children. */
-	type FragmentNode =
-		| Map<number, jsxNode>
-		| ReadonlyMap<number, jsxNode>
-		| readonly jsxNode[]
-		| { readonly [key: number]: jsxNode }
-
-	/** A function that returns a node. */
-	type FunctionNode = () => jsxNode
-
-	/** Attributes intrinsic to all JSX elements. */
-	interface Attributes {
-		children?: jsxNode
-	}
-
-	/** Attributes including the `action` macro. Intrinsic to all JSX instances. */
-	interface ActionAttributes<T> extends Attributes {
-		action?: (instance: T) => void
-	}
+	/** A collection of nodes. Vide unwraps these values when rendering, allowing for nested arrays and properties to be passed as children. */
+	type Nodes<T extends Instance> =
+		| Map<number, Node<T>>
+		| ReadonlyMap<number, Node<T>>
+		| readonly Node<T>[]
+		| { readonly [key: number]: Node<T> }
 
 	/** Infers the names of the enum values from an enum item. Resolves to a union
 	 * of the enum items and their respective names. */
@@ -637,38 +444,6 @@ declare namespace Vide {
 			: never
 	}
 
-	/** Instance property change events that can be passed a callback function.
-	 * Internally, these are resolved to `changed()` actions. */
-	type InstanceChangedCallbacks<T extends Instance> = {
-		[K in `${Extract<InstancePropertyNames<T>, string>}Changed`]?: K extends `${infer P extends Extract<InstancePropertyNames<T>, string>}Changed`
-			? (value: T[P]) => void
-			: never
-	}
-
-	/** Instance events and property change events that can be passed a callback
-	 * function. Property change events are a macro for `changed()` actions. */
-	type InstanceEventAttributes<T extends Instance> = InstanceEventCallbacks<T> & InstanceChangedCallbacks<T>
-
-	/** Instance properties and events that can be used with JSX syntax. */
-	type InstanceAttributes<T extends Instance> = ActionAttributes<T> &
-		InstancePropertySources<T> &
-		InstanceEventAttributes<T>
-
 	/** Instance properties and events that can be used with the `create`/`apply` functions. */
 	type InstanceProps<T extends Instance> = InstancePropertySources<T> & InstanceEventCallbacks<T>
-
-	namespace JSX {
-		type Element = Vide.jsxNode
-		type ElementType = string | ((props: any) => Element | void)
-
-		interface IntrinsicAttributes extends Vide.Attributes {}
-
-		interface ElementChildrenAttribute {
-			children: {}
-		}
-
-		type IntrinsicElements = {
-			[K in keyof CreatableInstances as Lowercase<K>]: Vide.InstanceAttributes<CreatableInstances[K]>
-		}
-	}
 }

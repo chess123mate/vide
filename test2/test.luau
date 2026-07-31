@@ -2,12 +2,20 @@ local printCases = false
 return function(tests, t)
 
 
-tests.skip = "strict" -- Enable this to make sure that no errors are popping up unexpectedly
+local runTestsWithErrors = false -- If true, runs tests that output user errors
+-- tests.focus = ""
 local runDelayTests = false -- Enable occasionally to make sure they're still working correctly
---[[Improvements
+
+--[[
+Possible Improvements
 - Mock task library and pass that around (maybe in 'flags') so that tests can run without any waiting (waitDefer still needed)
 - and/or convert cases to actual cases so they can run in parallel
 ]]
+
+if not runTestsWithErrors then
+    tests.skip = {"strict", "repWithError"}
+end
+
 local vide = require(game.ReplicatedStorage.vide)
 vide.strict = false
     local root = vide.root
@@ -33,6 +41,8 @@ vide.strict = false
 step(0) -- ensure it always disconnects while testing
 local graph = require(game.ReplicatedStorage.vide.graph)
 local get_scopes_n = graph.get_scopes_n
+vide.warn_on_repeated_root_destroy = false
+
 
 local function waitDefer() -- must use before checking if Changed properties have fired in case signal behaviour is deferred
     task.defer(coroutine.running())
@@ -55,15 +65,17 @@ local function mount(a, b)
 end
 
 local function wrap_root(fn)
-    return function()
-        local destroy = vide.root(fn)
+    return function(...)
+        local destroy = vide.root(function(destroy, ...)
+            fn(...)
+        end, ...)
         destroy()
     end
 end
 local function wrap_strict(fn)
-    return function()
+    return function(...)
         vide.strict = true
-        local ok, msg = xpcall(fn, debug.traceback)
+        local ok, msg = xpcall(fn, debug.traceback, ...)
         vide.strict = false
         if not ok then error(msg, 0) end
     end
@@ -73,50 +85,355 @@ local function weak<T>(t: T & {}): T
     return t
 end
 
+tests.style = wrap_root(function()
+    local style = source({Text = "First"})
+    local tl = create("TextLabel", {style})
+    t.equals(tl.Text, "First")
+    style({Text = "Second"})
+    t.equals(tl.Text, "Second")
+end)
 
-tests.rep = wrap_root(function()
-    local function print() end
-    print("--startup")
-    _G.nodeName = "a"
-    local a = source(0)
-    _G.nodeName = "b"
-    local nb = 0
-    local b = derive(function()
-        nb += 1
-        -- if a() == 1 then error("a is 1") end
-        return a() + 1
+tests.pointerToStyle = wrap_root(function()
+    local style = source({Text = "1"})
+    local pointer = source(style)
+    local tl = create("TextLabel", {pointer})
+    t.equals(tl.Text, "1")
+    style({Text = "2"})
+    t.equals(tl.Text, "2")
+    pointer(nil)
+    style({Text = "3"})
+    t.equals(tl.Text, "2", "pointer is nil so style change shouldn't impact label")
+end)
+
+tests.flexibleApply = function()
+    local s = source("0")
+    local parent = source(nil)
+    local propSource = source()
+    local sg
+    local label
+    local function tl(n)
+        return t.cleanup(create("TextLabel"){
+            Name = n,
+            Text = n,
+        })
+    end
+    local innerDestroy
+    local child = t.cleanup(Instance.new("TextLabel"))
+    local c1s = source({})
+    local c2s = source()
+    local cAlt = source({
+        tl("cAlt1"),
+        tl("cAlt2"),
+    })
+    local destroy = root(function()
+        sg = create("ScreenGui"){}
+        innerDestroy = root(function()
+            label = create("TextLabel"){
+                Name = "TopLabel",
+                Text = s,
+                Size = UDim2.new(0, 200, 0, 100),
+                TextSize = 30,
+                Parent = parent,
+                propSource,
+                c1s,
+                c2s,
+            }
+        end)
     end)
-    _G.nodeName = "c"
-    local nc = 0
-    local c = derive(function()
-        nc += 1
-        return a() * 2
-    end)
-    _G.nodeName = "c2"
-    local nc2 = 0
-    local c2 = derive(function()
-        nc2 += 1
-        return c()
-    end)
-    _G.nodeName = "d"
-    local nd = 0
-    local d = derive(function()
-        nd += 1
-        return b() * 100 + c2()
-    end)
-    _G.nodeName = "effect"
-    local ne = 0
+    t.cleanup(sg)
+    t.cleanup(label)
+    t.cleanup(destroy)
+    t.cleanup(innerDestroy)
+
+    s("1")
+    t.equals(label.Text, "1")
+
+    parent(sg)
+    t.equals(label.Parent, sg)
+
+    propSource({Text = "prop", child})
+    t.equals(label.Text, "prop")
+    t.equals(child.Parent, label)
+
+    t.equals(c1s(tl("c1")).Parent, label)
+
+    local c2 = c2s(tl("c2"))
+    t.equals(c2.Parent, label)
+    t.equals(#label:GetChildren(), 3)
+
+    c2s({tl("c3"), tl("c4")})
+    t.falsy(table.find(label:GetChildren(), c2))
+    t.equals(#label:GetChildren(), 4)
+
+    propSource({Text = "prop", child, cAlt})
+    t.equals(#label:GetChildren(), 6)
+
+    propSource(nil)
+    t.equals(#label:GetChildren(), 3)
+
+    innerDestroy()
+    t.equals(label.Parent, nil)
+end
+
+tests.effectInEffect = wrap_root(function()
+    local s1, s2 = source(), source()
+    local c1, c2 = 0, 0
     effect(function()
-        ne += 1
-        print(`a {a()} b {b()} c {c()} c2 {c2()} d {d()} || nums:`, nb, nc, nc2, nd, ne)
+        s1()
+        c1 += 1
+        effect(function()
+            s2()
+            c2 += 1
+        end)
     end)
-    print("--a1")
-    a(1)
-    print("--a2")
-    a(2)
-    print("--batch a3")
-    batch(function() a(2.5) a(3) end)
-    print("--done")
+    t.equals(c1, 1)
+    t.equals(c2, 1)
+
+    s1(1)
+    t.equals(c1, 2)
+    t.equals(c2, 2)
+
+    s2(1)
+    t.equals(c1, 2)
+    t.equals(c2, 3)
+end)
+
+tests.createInEffect = function()
+    local s1 = source()
+    local iv, changedValue
+    local id = 0
+    local parent = Instance.new("Folder")
+    root(function(destroy)
+        t.cleanup(destroy)
+        effect(function()
+            local v = s1() or 0
+            id += 1
+            iv = create("IntValue"){
+                Name = "I" .. id,
+                Parent = parent,
+                Value = v,
+                Changed = function(value)
+                    changedValue = value
+                end,
+            }
+        end)
+        t.truthy(iv)
+        t.equals(iv.Name, "I1")
+        t.equals(iv.Value, 0)
+        t.equals(iv.Parent, parent)
+        t.falsy(changedValue)
+
+        iv.Value = -1
+        waitDefer()
+        t.equals(changedValue, -1)
+
+        local prevIv = iv
+        s1(1)
+        t.notEquals(iv, prevIv)
+        t.truthy(iv)
+        t.equals(iv.Name, "I2")
+        t.equals(iv.Value, 1)
+        t.equals(iv.Parent, parent)
+
+        iv.Value = -2
+        waitDefer()
+        t.equals(changedValue, -2)
+
+        prevIv.Value = -3
+        waitDefer()
+        t.equals(changedValue, -2, "prevIv must not still be connected")
+
+        destroy()
+
+        iv.Value = -4
+        waitDefer()
+        t.equals(changedValue, -2, "iv must not still be connected after destroy")
+    end)
+end
+
+tests.springStopsUpdating = function()
+    local goal = source(0)
+    local spr
+    local v
+    local destroy = root(function()
+        spr = spring(goal)
+        goal(1)
+    end)
+    v = spr()
+
+    step(0.1)
+    t.notEquals(v, spr())
+    v = spr()
+
+    destroy()
+    step(0.1)
+    t.equals(v, spr(), "spring unchanged after destroy")
+end
+
+tests.springInEffect = function()
+    local s = source(0)
+    local goal = source(0)
+    local spr
+    local v
+    local destroy = root(function()
+        effect(function()
+            s()
+            spr = spring(goal)
+        end)
+        goal(1)
+    end)
+    v = spr()
+
+    step(0.1)
+    t.notEquals(v, spr())
+    v = spr()
+
+    local prevSpr = spr
+    s(1)
+    t.notEquals(spr, prevSpr)
+    t.equals(spr(), 1)
+
+    goal(2)
+    step(0.1)
+    t.notEquals(spr(), 1)
+    v = spr()
+
+    destroy()
+    step(0.1)
+    t.equals(v, spr(), "spring unchanged after destroy")
+end
+
+tests.repWithError = {
+    test = wrap_root(function(config)
+        local e1, e2, err = config.e1, config.e2, config.err
+        if not e2 then
+            e2 = table.clone(e1)
+            for i, v in e2 do e2[i] = v + 1 end
+        end
+        local a = source(0)
+        local nb = 0
+        local b = derive(function()
+            if err == "b" and a() == 1 then error("user error") end
+            nb += 1
+            return a() + 1
+        end)
+        local nc = 0
+        local c = derive(function()
+            if err == "c" and a() == 1 then error("user error") end
+            nc += 1
+            return a() * 2
+        end)
+        local nc2 = 0
+        local c2 = derive(function()
+            if err == "c2" and c() == 2 then error("user error") end
+            nc2 += 1
+            return c()
+        end)
+        local nd = 0
+        local d = derive(function()
+            if err == "d" and b() == 2 then error("user error") end
+            nd += 1
+            return b() * 100 + c2()
+        end)
+        local ne = 0
+        effect(function()
+            if err == "e" and a() == 1 then error("user error") end
+            ne += 1
+            a(); b(); c(); c2(); d()
+        end)
+        local length = graph.get_update_queue_length()
+        a(1)
+        t.multi(function(m)
+            m.equals("b", nb, e1[1])
+            m.equals("c", nc, e1[2])
+            m.equals("c2", nc2, e1[3])
+            m.equals("d", nd, e1[4])
+            m.equals("e", ne, e1[5])
+        end)
+        t.equals(graph.get_update_queue_length(), length, "update queue length should not have increased due to error")
+        a(2)
+        t.multi(function(m)
+            m.equals("b", nb, e2[1])
+            m.equals("c", nc, e2[2])
+            m.equals("c2", nc2, e2[3])
+            m.equals("d", nd, e2[4])
+            m.equals("e", ne, e2[5])
+        end)
+    end),
+    args = {
+        {
+            name = "b",
+            err = "b",
+            e1 = {1, 2, 2, 2, 2},
+        },
+        {
+            name = "c",
+            err = "c",
+            e1 = {2, 1, 1, 2, 2},
+        },
+        {
+            name = "c2",
+            err = "c2",
+            e1 = {2, 2, 1, 2, 2},
+        },
+        {
+            name = "d",
+            err = "d",
+            e1 = {2, 2, 2, 1, 2},
+        },
+        {
+            name = "e",
+            err = "e",
+            e1 = {2, 2, 2, 2, 1},
+            e2 = {3, 3, 3, 3, 3}, -- e has a dependency on just 'a' after the first time, so it'll get updated 2x (only way to prevent this extra update is to yield, which isn't currently supported)
+        }
+    },
+}
+
+tests.changingDeps = wrap_root(function()
+    local a = source(true)
+    local b = source(1)
+    local c = source(2)
+    local function derive2(s)
+        local n = {0}
+        return n, derive(function()
+            n[1] += 1
+            return s()
+        end)
+    end
+    local an, a2 = derive2(a)
+    local bn, b2 = derive2(b)
+    local cn, c2 = derive2(c)
+    local en = {0}
+    local e = derive(function()
+        en[1] += 1
+        return if a2() then b2() else c2()
+    end)
+    local function confirm(a, b, c, e, ...) -- confirm the number of updates since the last confirm
+        t.multi(function(m)
+            m.equals("an", an[1], a)
+            m.equals("bn", bn[1], b)
+            m.equals("cn", cn[1], c)
+            m.equals("en", en[1], e)
+        end, ...)
+        an[1] = 0
+        bn[1] = 0
+        cn[1] = 0
+        en[1] = 0
+    end
+    confirm(1, 1, 1, 1, "init")
+
+    b(10)
+    confirm(0, 1, 0, 1)
+
+    a(false)
+    confirm(1, 0, 0, 1)
+
+    b(10)
+    confirm(0, 0, 0, 0)
+
+    c(10)
+    confirm(0, 0, 1, 1)
 end)
 
 
@@ -135,11 +452,6 @@ tests["graph"] = function()
     type Node<T> = graph.Node<T>
     local function node<T>(owner: Node<any>?, v: T?)
         return create_node(owner or false, function(x) return not x end, v or false :: any)
-    end
-
-    local function nnode<T>(name, owner: Node<any>?, v: T?)
-        _G.nodeName = name
-        return node(name, owner, v)
     end
 
     local function scope(owner: Node<any>?)
@@ -196,6 +508,20 @@ tests["graph"] = function()
         update_descendants(b)
         t.equals(count, 3)
     end
+
+    -- Disabled: multiple children allowed (since graph's in_queue prevents side-effects from running multiple times and this scenario will be rare, so no reason to spend time looking)
+    -- do CASE "duplicate children"
+    --     local root = node()
+    --     local a = node() -- such as a source
+    --     local b = node(root) -- such as a derive call that references the source 2x
+    --     push_scope(b)
+    --     push_scope_as_child_of(a)
+    --     push_scope_as_child_of(a)
+    --     pop_scope()
+    --     local c = 0
+    --     for entry in b.parents do c += 1 end
+    --     t.equals(c, 1)
+    -- end
 
     do CASE "diamond graph"
         -- a -> b -> d
@@ -1336,6 +1662,7 @@ tests["show()"] = wrap_root(function()
     end
 
 if runDelayTests then
+    task.wait(1) -- todo this is an ugly workaround to current timing issues
     do CASE "delay (destruction)"
         local input = source(false)
 
@@ -2326,17 +2653,19 @@ tests["events"] = function()
     do CASE "connect event"
         local connected = false
 
-        local val = t.cleanup(Thing {
-            Changed = function(newval)
-                connected = true
-                t.equals(newval, 1)
-            end
-        })
+        wrap_root(function()
+            local val = t.cleanup(Thing {
+                Changed = function(newval)
+                    connected = true
+                    t.equals(newval, 1)
+                end
+            })
 
-        t.truthy(not connected)
-        val.Value = 1
-        waitDefer()
-        t.truthy(connected)
+            t.truthy(not connected)
+            val.Value = 1
+            waitDefer()
+            t.truthy(connected)
+        end)
     end
 end
 

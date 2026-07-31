@@ -1,8 +1,37 @@
 ## Changes compared to other forks
 
-- meant for use in Roblox-TS only (timeout removed)
+- meant for use primarily in Roblox-TS (timeout removed) without using jsx
 - `defaults` removed
-- apply and create use `(instance, props, children)` (props and children are effectively the same thing but separated for Typescript purposes)
+- apply and create use `(instance, props, children)` (props and children are effectively the same thing but separated for Typescript convenience - you can still just use `props` and ignore `children` if desired)
+  - children are deparented when an apply call is cleaned up
+  - before you could include a source that returned a list of children; you can now also include other properties for the target instance (see below about styling)
+- `spring` cleans itself up when owning scope removed
+- Remove requiring things to run in "stable scopes" (though, for performance, you should still be careful of creating new instances in effects that change rapidly)
+- Added `warn_on_repeated_root_destroy`
+
+Example with custom styles:
+
+```lua
+root(function()
+	local style = source()
+	local label = create("TextLabel", {style})
+	style({Text = "Styled"})
+	print(label.Text) -- "Styled"
+	-- Note: properties are not reverted if the source is changed:
+	style(nil)
+	print(label.Text) -- "Styled"
+	-- Of course you can keep changing the style:
+	style({Text = "New"})
+	print(label.Text) -- "New"
+
+	-- You can also point a source to another source:
+	local alternate = source({Text = "Alternate")})
+	style(alternate)
+	print(label.Text) -- "Alternate"
+	-- In this example, further modifications to `alternate` will still update `label.Text`. If `style` changes to a different source, this will get cleaned up.
+	-- Although this example talks of "styles", these mechanics work for any purpose. If `alternate` had instances inside, these would become children of `label`; if they had event connections, these would be properly handled as well.
+end)
+```
 
 <div align="center">
     <img src="docs/public/full_logo.svg" width="600" />
@@ -29,7 +58,7 @@ local source = vide.source
 local function Counter()
     local count = source(0)
 
-    return create "TextButton" {
+    return create("TextButton", {
         Text = function()
             return "count: " .. count()
         end,
@@ -37,128 +66,19 @@ local function Counter()
         Activated = function()
             count(count() + 1)
         end
-    }
+    })
 end
 ```
 
-## JSX
+or
 
-Vide for roblox-ts brings JSX support to the library. As a result, this extension adds a set of components and utilities to improve usage.
-
-> [!TIP]
->
-> - Vide JSX adds new components for syntax sugar, including `<Show>`, `<Switch>`/`<Case>`, `<For>`/`<Index>`, and `<Provider>`.
-> - Use the `action` prop to create a Vide action that receives the new instance as an argument.
-> - `switch` is a reserved keyword in TypeScript, so the `switch()` function is exposed under the alias `match()`.
-
-### Installation
-
-To use JSX with Vide, you need to configure the `jsx` option in your `tsconfig.json`:
-
-```json
-"compilerOptions": {
-    "jsx": "react",
-    "jsxFactory": "Vide.jsx",
-    "jsxFragmentFactory": "Vide.Fragment",
-}
-```
-
-> [!NOTE]
-> Vide JSX requires roblox-ts version 3.0 or higher.
-> You can update roblox-ts by running `npm install -D roblox-ts@latest`.
-
-### Code sample
-
-```tsx
+```ts
+import { create, source } from "@rbxts/vide"
 function Counter() {
-	const count = source(0);
-
-	return (
-		<textbutton
-			Text={() => `count: ${count()}`}
-			TextChanged={(text) => print(text)}
-			Activated={() => count(count() + 1)}
-		/>
-	);
+	const count = source(0)
+	return create("TextButton", {
+		Text: () => "count: " + count(),
+		Activated: () => count(count() + 1),
+	})
 }
-```
-
-### `<Show>`
-
-A conditional rendering component that accepts a boolean value and a function that returns the element to render when the condition is true.
-
-```tsx
-const show = source(true);
-
-<Show when={show}>
-	{() => {
-		return <textbutton Text="Hello, world!" />;
-	}}
-</Show>;
-```
-
-### `<Switch>`/`<Case>`
-
-A conditional rendering component that accepts a value and a list of cases. Each case is denoted by a `<Case>` component, and if the `condition` matches the `match` prop of a case, the corresponding element is rendered.
-
-```tsx
-const value = source("a");
-
-<Switch condition={value}>
-	<Case match="a">{() => <textbutton Text="A" />}</Case>
-	<Case match="b">{() => <textbutton Text="B" />}</Case>
-	<Case match="c">{() => <textbutton Text="C" />}</Case>
-</Switch>;
-```
-
-### `<For>`
-
-A referentially keyed loop (rendered nodes are keyed to a table value). The `each` prop accepts an array or a map, and calls the `children` function for each element in the array or map.
-
-If an entry is removed or changed, the corresponding node is updated or cleaned up.
-
-```tsx
-const items = source(["a", "b", "c"]);
-
-<For each={items}>
-	{(item: string, index: () => number) => {
-		return <textbutton Text={item} />;
-	}}
-</For>;
-```
-
-### `<Index>`
-
-A referentially keyed loop (rendered nodes are keyed to a table index). The `each` prop accepts an array or a map, and calls the `children` function for each element in the array or map.
-
-If an entry is removed or changed, the corresponding node is updated or cleaned up.
-
-```tsx
-const items = source(["a", "b", "c"]);
-
-<Index each={items}>
-	{(item: () => string, index: number) => {
-		return <textbutton Text={() => item()} />;
-	}}
-</Index>;
-```
-
-### `<Provider>`
-
-A component that renders its children with the `value` prop assigned to the context. The value can be accessed by calling the `context` function while the `children` function is running.
-
-`<Provider>` is syntax sugar for `context(value, () => children)`.
-
-> [!NOTE]
-> The context function must be called within the top-level of a component. Calling it within an effect or on a new thread may return the default value.
-
-```tsx
-const theme = context("light");
-
-<Provider context={theme} value="dark">
-	{() => {
-		const value = theme();
-		return <textbutton Text={value} />;
-	}}
-</Provider>;
 ```

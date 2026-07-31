@@ -5,7 +5,7 @@ local get_scope = graph.get_scope
 local function untrack<T>(source: () -> T): T
     local scope = get_scope()
 
-    if scope then
+    if scope and scope.effect then
         -- sources are only tracked if the node in scope has an effect
         local effect = scope.effect
         scope.effect = false

@@ -1,12 +1,14 @@
+--!native
 local batch = require "./batch"
 local graph = require "./graph"
 type Node<T> = graph.Node<T>
 type SourceNode<T> = graph.SourceNode<T>
 local create_node = graph.create_node
 local create_source_node = graph.create_source_node
-local assert_stable_scope = graph.assert_stable_scope
+local get_scope = graph.get_scope
 local evaluate_node = graph.evaluate_node
 local update_descendants = graph.update_descendants
+local push_cleanup = graph.push_cleanup
 local push_scope_as_child_of = graph.push_scope_as_child_of
 
 local UPDATE_RATE = 120
@@ -135,7 +137,7 @@ local springs: { [SpringState<unknown>]: SourceNode<unknown> } = {}
 setmetatable(springs :: any, { __mode = "v" })
 
 local function spring<T>(source: () -> T, period: number?, damping_ratio: number?): (() -> T, SpringSettings<T>)
-    local owner = assert_stable_scope()
+    local owner = get_scope() or error("spring must be called within a scope", 2)
 
     -- https://en.wikipedia.org/wiki/Damping
     local w_n = 2*math.pi / (period or 1)
@@ -147,7 +149,7 @@ local function spring<T>(source: () -> T, period: number?, damping_ratio: number
     -- todo: is there a solution other than reducing step size?
     -- todo: this does not catch all solver exploding cases
     if c > UPDATE_RATE*2 then -- solver will explode if this is true
-        error("spring damping too high, consider reducing damping or increasing period", 2)
+        error("spring damping too high; consider reducing damping or increasing period", 2)
     end
 
     local data: SpringState<T> = {
@@ -210,6 +212,10 @@ local function spring<T>(source: () -> T, period: number?, damping_ratio: number
         -- schedule spring
         springs[data] = output
     end :: SpringSettings<T>
+
+    push_cleanup(owner, function()
+        springs[data] = nil
+    end)
 
     return function(...)
         if select("#", ...) == 0 then -- no args were given

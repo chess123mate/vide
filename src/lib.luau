@@ -21,8 +21,6 @@ local spring, update_springs = require "./spring"()
 local action = require "./action"()
 local changed = require "./changed"
 local flags = require "./flags"
-local components = require "./components"
-local jsx = require "./jsx"
 
 export type Source<T> = source.Source<T>
 export type source<T> = Source<T>
@@ -48,6 +46,7 @@ local vide = {
     effect = effect,
     derive = derive,
     switch = switch,
+    match = switch, -- typescript
     show = show,
     indexes = indexes,
     values = values,
@@ -79,17 +78,6 @@ local vide = {
         end
         step(dt)
     end,
-
-    -- typescript
-    jsx = jsx,
-    match = switch,
-    Fragment = components.Fragment,
-    Switch = components.Switch,
-    Case = components.Case,
-    For = components.For,
-    Index = components.Index,
-    Show = components.Show,
-    Provider = components.Provider,
 }
 
 setmetatable(vide :: any, {

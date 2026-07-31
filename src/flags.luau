@@ -8,4 +8,5 @@ return {
     strict = not is_O2,
     defer_nested_properties = true,
     batch = false,
+    warn_on_repeated_root_destroy = true,
 }

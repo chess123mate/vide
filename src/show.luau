@@ -15,7 +15,7 @@ local function show<T, Obj>(
     local filtered_input = source()
 
     effect(function()
-        local v = input() 
+        local v = input()
         if v then
             filtered_input(v)
         end

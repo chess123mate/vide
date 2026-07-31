@@ -1,15 +1,15 @@
 --!native
 local flags = require "./flags"
-
 export type SourceNode<T> = {
     cache: T,
     [number]: Node<T>
 }
 
-export type Node<T> =  {
+export type Node<T> = {
     cache: T,
-    effect: ((T) -> T) | false,
+    effect: (T) -> (T) | false,
     cleanups: { () -> () } | false,
+    destroy: (T) -> () | false, -- what to run when the node is destroyed; called with the current cache
 
     context: { [number]: unknown } | false,
 
@@ -17,12 +17,13 @@ export type Node<T> =  {
     owner: Node<T> | false,
 
     parents: { SourceNode<T> },
-    [number]: Node<T> -- children
+    [number]: Node<T>, -- children
 }
 
 local scopes_n = 0
 local scopes = {} :: { [number]: Node<any>, n: number } -- scopes stack
 local function get_scopes_n() return scopes_n end
+
 local function efn(err: string)
     local trace = debug.traceback(err, 2)
 
@@ -35,9 +36,8 @@ local function efn(err: string)
 end
 
 local function ycall<T, U>(fn: (T) -> U, arg: T): (boolean, string|U)
-
     local thread = coroutine.create(xpcall)
-    --local function efn(err: string) return debug.traceback(err, 3) end
+
     local resume_ok, run_ok, result = coroutine.resume(thread, fn, efn, arg)
 
     assert(resume_ok)
@@ -53,17 +53,8 @@ local function get_scope(): Node<unknown>?
     return scopes[scopes_n]
 end
 
-local function assert_stable_scope(): Node<unknown>
-    local scope = get_scope()
-
-    if not scope then
-        local caller_name = debug.info(2, "n")
-        return error(`cannot use {caller_name}() outside a stable or reactive scope`, 0)
-    elseif scope.effect then
-        error("cannot create a new reactive scope inside another reactive scope", 0)
-    end
-
-    return scope
+local function assert_scope(): Node<unknown>
+    return scopes[scopes_n] or error(`cannot use {debug.info(2, "n")}() outside a scope`, 3)
 end
 
 local function push_child<T>(parent: SourceNode<any>, child: Node<any>)
@@ -91,6 +82,18 @@ local function push_cleanup<T>(node: Node<T>, cleanup: () -> ())
     end
 end
 
+local function register_destroy<T>(node: Node<T>, destroy: (T) -> ())
+    if node.destroy then
+        local base = node.destroy
+        node.destroy = function(cache)
+            base(cache)
+            destroy(cache)
+        end
+    else
+        node.destroy = destroy
+    end
+end
+
 local function flush_cleanups<T>(node: Node<T>)
     if node.cleanups then
         for _, fn in node.cleanups do
@@ -110,11 +113,10 @@ end
 
 local function unparent<T>(node: Node<T>)
     local parents = node.parents
-
-    for i, parent in parents do
+    for _, parent in parents do
         find_and_swap_pop(parent, node)
-        parents[i] = nil
     end
+    table.clear(parents)
 end
 
 local function destroy<T>(node: Node<T>)
@@ -134,6 +136,12 @@ local function destroy<T>(node: Node<T>)
         local owned = node.owned
         while owned[1] do destroy(owned[1]) end
     end
+
+    local destroy = node.destroy
+    if destroy then
+        destroy(node.cache)
+        node.destroy = nil
+    end
 end
 
 local function destroy_owned<T>(node: Node<T>)
@@ -141,18 +149,6 @@ local function destroy_owned<T>(node: Node<T>)
         local owned = node.owned
         while owned[1] do destroy(owned[1]) end
     end
-end
-
-local update_queue_n = 0
-local in_queue = {}
-local update_queue = {} :: { [number]: Node<any> }
-local node_deps_left = {} -- any node that goes into the update queue needs to store how many dependencies it's waiting on
-
-local function reset_queue()
-    update_queue_n = 0
-    table.clear(in_queue)
-    table.clear(update_queue)
-    table.clear(node_deps_left)
 end
 
 local function evaluate_node<T>(node: Node<T>, continue_on_error: boolean) -- if continue_on_error, the calling function wishes to continue even if the update fails (without using pcall)
@@ -174,7 +170,7 @@ local function evaluate_node<T>(node: Node<T>, continue_on_error: boolean) -- if
             pop_scope()
 
             if not ok then
-                local msg = debug.traceback(`effect error: {new_value}`, 2)
+                local msg = debug.traceback(`effect error: {new_value}`)
                 if continue_on_error then
                     task.spawn(error, msg, 0)
                     return false
@@ -194,11 +190,12 @@ local function evaluate_node<T>(node: Node<T>, continue_on_error: boolean) -- if
         destroy_owned(node)
 
         push_scope(node)
-        local ok, new_value = pcall(node.effect :: (T) -> T, cur_value)
+        -- Note: original used pcall instead of ycall to be faster, but if an error ever does occur then critical trace information is lost
+        local ok, new_value = ycall(node.effect :: (T) -> T, cur_value)
         pop_scope()
 
         if not ok then
-            local msg = debug.traceback(`effect error: {new_value}`, 2)
+            local msg = debug.traceback(`effect error: {new_value}`)
             if continue_on_error then
                 task.spawn(error, msg, 0)
                 return false
@@ -210,6 +207,22 @@ local function evaluate_node<T>(node: Node<T>, continue_on_error: boolean) -- if
         node.cache = new_value
         return cur_value ~= new_value
     end
+end
+
+local update_queue_n = 0
+local in_queue = {}
+local update_queue = {} :: { [number]: Node<any> }
+local node_deps_left = {} -- any node that goes into the update queue needs to store how many dependencies it's waiting on
+
+local function get_update_queue_length()
+    return update_queue_n
+end
+
+local function reset_queue()
+    update_queue_n = 0
+    table.clear(in_queue)
+    table.clear(update_queue)
+    table.clear(node_deps_left)
 end
 
 local function add_dependency_counts(node)
@@ -229,25 +242,35 @@ local function remove_dependency_counts(node) -- to be called when updating a no
     for i = 1, #node do
         local child = node[i]
         if not node.owner then continue end -- we won't be updating this anyway
-        node_deps_left[child] -= 1
-        remove_dependency_counts(child)
+        local deps_left = node_deps_left[child]
+        if deps_left > 1 then
+            node_deps_left[child] = deps_left - 1
+        else
+            node_deps_left[child] = 0
+            -- only recurse if we're removing the last dependency *and* if we aren't planning on updating it
+            if not in_queue[child] then
+                remove_dependency_counts(child)
+            end
+        end
     end
 end
 
 local function queue_children_for_update<T>(node: SourceNode<T>)
     for i = 1, #node do
         local child = node[i]
-        node_deps_left[child] -= 1
+        local deps_left = node_deps_left[child]
+        if deps_left then
+            node_deps_left[child] = deps_left - 1
+        else
+            -- This can happen if child adds parent as a new dependency after the initial update
+            node_deps_left[child] = 0
+        end
         if not in_queue[child] then
             in_queue[child] = true
             update_queue_n += 1
             update_queue[update_queue_n] = child
         end
     end
-end
-
-local function get_update_queue_length()
-    return update_queue_n
 end
 
 local function flush_update_queue(from: number)
@@ -366,8 +389,9 @@ return table.freeze {
     pop_scope = pop_scope,
     evaluate_node = evaluate_node,
     get_scope = get_scope,
-    assert_stable_scope = assert_stable_scope,
+    assert_scope = assert_scope,
     push_cleanup = push_cleanup,
+    register_destroy = register_destroy,
     destroy = destroy,
     flush_cleanups = flush_cleanups,
     push_scope_as_child_of = push_scope_as_child_of,

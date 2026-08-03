@@ -2678,27 +2678,11 @@ tests["actions"] = function()
             action(function(self)
                 frame_ref = self
                 ran = true
-            end, 1)
+            end)
         }
 
         t.truthy(ran)
         t.equals(frame_ref, frame)
-    end
-
-    do CASE "priorities"
-        local queue = {}
-
-        create "Frame" {
-            action(function(self)
-                table.insert(queue, 2)
-            end, 2),
-
-            action(function(self)
-                table.insert(queue, 1)
-            end, 1)
-        }
-
-        t.tablesEqual(queue, { 1, 2 })
     end
 end
 

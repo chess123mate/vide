@@ -19,10 +19,7 @@ type Cache = {
     >,
 
     -- actions to run after events are connected
-    actions: Map<
-        number, -- priority
-        Array<(Instance) -> ()> -- action callbacks
-    >,
+    actions: Array<(Instance) -> ()>,
 
     -- what to parent the instance to after running actions
     parent: unknown,
@@ -54,7 +51,7 @@ local function borrow_cache(): Cache
     else
         return {
             events = {},
-            actions = setmetatable({} :: any, cache_lazy_init_mt),
+            actions = {},
             parent = nil,
             nested_debug = flags.strict and setmetatable({} :: any, cache_lazy_init_mt),
             nested_stack = {}
@@ -99,7 +96,7 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 implicit_effect.children(instance, value :: () -> ArrayOrV<Instance>) -- bind children
             elseif type(value) == "table" then
                 if is_action(value) then
-                    table.insert(cache.actions[(value :: any).priority], (value :: any).callback :: () -> ()) -- add action to buffer
+                    table.insert(cache.actions, (value :: any).callback :: () -> ()) -- add action to buffer
                 elseif flags.defer_nested_properties then
                     table.insert(cache.nested_stack, value :: {})
                     table.insert(cache.nested_stack, depth + 1) -- push table to stack for later processing
@@ -152,10 +149,8 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
     end
     table.clear(events)
 
-    for _, queued in actions do
-        for _, callback in queued do
-            callback(instance)
-        end
+    for _, callback in actions do
+        callback(instance)
     end
     table.clear(actions)
 

@@ -1,5 +1,4 @@
 type Action = {
-    priority: number,
     callback: (Instance) -> ()
 }
 
@@ -9,15 +8,10 @@ local function is_action(v: any)
     return getmetatable(v) == ActionMT
 end
 
-local function action(callback: (Instance) -> (), priority: number?): Action
-    local a = {
-        priority = priority or 1,
+local function action(callback: (Instance) -> ()): Action
+    return table.freeze(setmetatable({
         callback = callback
-    }
-
-    setmetatable(a :: any, ActionMT)
-
-    return table.freeze(a)
+    }, ActionMT))
 end
 
 return function()

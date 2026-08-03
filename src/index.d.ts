@@ -22,7 +22,6 @@ declare namespace Vide {
 	/** An object containing the custom logic to invoke when an instance is
 	 * created. Created using `action()` */
 	interface Action<T extends Instance> {
-		priority: number
 		callback: (instance: T) => void
 	}
 
@@ -322,10 +321,9 @@ declare namespace Vide {
 	 * created, after properties and children are applied.
 	 *
 	 * @param callback The function to run when the instance is created. If you need to react to state changes, use `effect` inside the callback.
-	 * @param priority The priority of the action. Higher priorities run first.
 	 *
 	 * @see https://centau.github.io/vide/api/creation#action */
-	function action<T extends Instance>(callback: (instance: T) => void, priority?: number): Action<T>
+	function action<T extends Instance>(callback: (instance: T) => void): Action<T>
 
 	/** Creates an Action that runs the callback when a property changes on an
 	 * instance. The callback will be invoked once initially and every time the

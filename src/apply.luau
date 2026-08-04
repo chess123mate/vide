@@ -118,10 +118,9 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
         error("attempt to call apply with no instance", 2)
     end
     if not properties then
-        if not children then
-            error("attempt to call apply with no properties and no children", 2)
+        if children then
+            properties = children :: { [unknown]: unknown }
         end
-        properties = children :: { [unknown]: unknown }
     elseif children then
         table.insert(properties :: any, children)
     end
@@ -132,13 +131,14 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
     local actions = cache.actions
     local nested_stack = cache.nested_stack
 
-    -- process all properties
-    local depth = 1
-    repeat
-        process_properties(properties :: any, instance, cache, depth)
-        depth = table.remove(nested_stack) :: number
-        properties = table.remove(nested_stack) :: {}
-    until not properties
+    if properties then -- process all properties
+        local depth = 1
+        repeat
+            process_properties(properties :: any, instance, cache, depth)
+            depth = table.remove(nested_stack) :: number
+            properties = table.remove(nested_stack) :: {}
+        until not properties
+    end
 
     local num_events = #events
     local cons = num_events > 0 and table.create(num_events / 2)
@@ -165,7 +165,7 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
 
     local clean = if destroy
         then function() instance:Destroy() end
-        else function()
+        elseif cons or parent then function()
             if cons then
                 for _, con in cons do
                     con:Disconnect()
@@ -175,11 +175,14 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
                 instance.Parent = nil
             end
         end
-    if scope then
-        push_cleanup(scope, clean)
-    elseif cons then
-        clean()
-        error("create/apply with arguments requiring cleanup, but called without a scope", 2)
+        else nil
+    if clean then
+        if scope then
+            push_cleanup(scope, clean)
+        elseif cons then
+            clean()
+            error("create/apply with arguments requiring cleanup, but called without a scope", 2)
+        end
     end
 
     cache.parent = nil

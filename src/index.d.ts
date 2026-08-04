@@ -112,6 +112,11 @@ declare namespace Vide {
 		props?: InstanceProps<CreatableInstances[K]>,
 		children?: Node<CreatableInstances[K]>[],
 	): CreatableInstances[K]
+	function create<T extends Instance>(
+		objToClone: T,
+		props?: InstanceProps<T>,
+		children?: Node<T>[],
+	): T
 
 	/** Creates a state container that can be read and updated (from anywhere - being in a scope is not required).
 	 * Calling the source with no arguments will return the stored value, whereas calling
@@ -148,6 +153,11 @@ declare namespace Vide {
 	 * it derives from is updated.
 	 *
 	 * Must be called in a scope.
+	 *
+	 * Tip: when using `create`/`apply`, passing in a function with `derive` is redundant. In general it's beneficial to use derive in any of these cases:
+	 *
+	 * - You are creating a source that updates less frequently than its input sources
+	 * - You are using the resulting value in multiple places (so caching the result is valuable)
 	 *
 	 * @see https://centau.github.io/vide/api/reactivity-core#derive */
 	function derive<T>(source: () => T): RSource<T>
@@ -193,15 +203,6 @@ declare namespace Vide {
 		component: (value: () => NonNullable<Condition>, show: () => boolean) => MaybeDelayed<Result>,
 		fallback?: (show: () => boolean) => MaybeDelayed<Fallback>,
 	): () => Result | Fallback
-	// function show<Condition, Result, Fallback = undefined>(
-	// 	source: Source<Condition | undefined> | Source<Condition>,
-	// 	component: (value: Source<Condition>, show: Source<boolean>) => MaybeDelayed<Result>,
-	// 	fallback: (show: () => boolean) => MaybeDelayed<Fallback>,
-	// ): Source<Result | Fallback>
-	// function show<Condition, Result, Fallback = undefined>(
-	// 	source: Source<Condition | undefined> | Source<Condition>,
-	// 	component: (value: Source<Condition>, show: Source<boolean>) => MaybeDelayed<Result>,
-	// ): Source<Result | undefined>
 
 	/** Maps each _key_ in a table source to a component. Returns a source holding
 	 * an array of the rendered components.
@@ -403,16 +404,9 @@ declare namespace Vide {
 
 	// Elements
 
-	/*
-	function create<K extends keyof CreatableInstances>(
-		className: K,
-		props?: InstanceProps<CreatableInstances[K]> | Node<CreatableInstances[K]>[],
-		children?: Node<CreatableInstances[K]>[],
-	): CreatableInstances[K]
-	*/
 	/** A value that can be passed to the `create()` function.
 	 * @template T The type of instance to create. */
-	export type Node<T extends Instance> =
+	export type Node<T extends Instance = Instance> =
 		| InstanceProps<T>
 		| Action<T>
 		| (() => Node<T> | undefined)
@@ -420,7 +414,7 @@ declare namespace Vide {
 		| Nodes<T>
 
 	/** A collection of nodes. Vide unwraps these values when rendering, allowing for nested arrays and properties to be passed as children. */
-	type Nodes<T extends Instance> =
+	type Nodes<T extends Instance = Instance> =
 		| Map<number, Node<T>>
 		| ReadonlyMap<number, Node<T>>
 		| readonly Node<T>[]

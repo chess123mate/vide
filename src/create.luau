@@ -6,9 +6,6 @@ local function create(class_or_instance: string|Instance, properties: { [unknown
     if type_ ~= "string" and type_ ~= "Instance" then
         error("create argument #1, expected string or instance, got " .. type_, 2)
     end
-    if not properties and not children then
-        error("create argument #2, missing properties", 2)
-    end
 
     if type_ == "string" then
         return apply(Instance.new(class_or_instance :: any), properties, children, true)

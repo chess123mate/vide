@@ -1,18 +1,11 @@
 local apply = require "./apply"
-local flags = require "./flags"
 
-local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?, children: {unknown}?): unknown
+local function create(class_or_instance: string|Instance, properties: { [unknown]: unknown }?, children: { unknown }?): Instance
     local type_ = typeof(class_or_instance)
-    if type_ ~= "string" and type_ ~= "Instance" then
-        error("create argument #1, expected string or instance, got " .. type_, 2)
-    end
-
-    if type_ == "string" then
-        return apply(Instance.new(class_or_instance :: any), properties, children, true)
-    else
-        local clone = class_or_instance:Clone() or error("attempt to clone a non-archivable instance", 0)
-        return apply(clone, properties, children, true)
-    end
+    local instance = if type_ == "string" then Instance.new(class_or_instance :: string)
+        elseif type_ == "Instance" then class_or_instance
+        else error("create argument #1, expected string or instance, got " .. type_, 2)
+    return apply(instance, properties, children, true)
 end
 
 export type Instances = {
@@ -77,6 +70,6 @@ export type function Properties(instance: type?)
     return properties
 end
 
-type Create = <Name>(Name|keyof<Instances>|"", Properties<index<Instances, Name>>) -> index<Instances, Name>
+export type Create = <Name>(Name|keyof<Instances>|"", Properties<index<Instances, Name>>) -> index<Instances, Name>
 
 return create :: Create

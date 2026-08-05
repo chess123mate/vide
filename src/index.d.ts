@@ -97,13 +97,13 @@ declare namespace Vide {
 	 * @see https://centau.github.io/vide/api/creation#mount */
 	function mount<T, Args extends unknown[]>(component: T extends void ? never : (...args: Args) => T, target: Instance, ...args: Args): LuaTuple<[Cleanup, T]>
 
-	/** Creates or clones a new instance and applies any given properties & children.
+	/** Creates or sets up a new instance and applies any given properties & children.
 	 *
-	 * Be cautious calling this in an effect/derive call, as this will trigger the creation of new instances every time the state changes. Prefer to use `apply` with an object pool or create the instance in a manually controlled scope with `root`/`branch`.
+	 * Note that the instance is destroyed on cleanup. If you don't want this behaviour, use `apply` with `destroy = false`.
 	 *
-	 * Note that the instance is destroyed on cleanup.
+	 * Be cautious calling this in an effect/derive call, as this will trigger the creation of new instances every time the state changes. Prefer to use `apply` with an object pool or (most optimally) create the instance in a manually controlled scope with `root`/`branch`.
 	 *
-	 * @param className The class name of the instance to create, or an instance to clone.
+	 * @param className The class name of the instance to create, or an instance to apply properties to. If it's an instance, it's assumed it was just created for this call and so will be destroyed during cleanup. If this is not desired, use `apply` instead.
 	 * @param props The properties to apply to the new instance. Property values can point to sources.
 	 * @param children The list of children and/or sources of properties and/or children (and/or more sources). You could pass this in with `props` instead, but this is here for TS-convenience (so you should use `{}` for props and `[]` for children).
 	 *
@@ -114,10 +114,20 @@ declare namespace Vide {
 		children?: ChildNode[],
 	): CreatableInstances[K]
 	function create<T extends Instance>(
-		objToClone: T,
+		objToSetUp: T,
 		props?: InstanceProps<T>,
 		children?: ChildNode[],
 	): T
+
+	/** Applies properties and children to an existing instance.
+	 *
+	 * @param instance The instance to apply properties to.
+	 * @param props The properties to apply to the new instance. Property values can point to sources.
+	 * @param children The list of children and/or sources of properties and/or children (and/or more sources). You could pass this in with `props` instead, but this is here for TS-convenience (so you can use `[]`).
+	 * @param destroy If true (defaults to false), on cleanup will destroy `instance` instead of deparenting it
+	 *
+	 * @returns The instance with the properties applied. */
+	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: ChildNode[], destroy?: boolean): T
 
 	/** Creates a state container that can be read and updated (from anywhere - being in a scope is not required).
 	 * Calling the source with no arguments will return the stored value, whereas calling
@@ -342,16 +352,6 @@ declare namespace Vide {
 		callback: (value: WritableInstanceProperties<T>[K]) => void,
 	): Action<T>
 
-	/** Applies properties and children to an existing instance.
-	 *
-	 * @param instance The instance to apply properties to.
-	 * @param props The properties to apply to the new instance. Property values can point to sources.
-	 * @param children The list of children and/or sources of properties and/or children (and/or more sources). You could pass this in with `props` instead, but this is here for TS-convenience (so you can use `[]`).
-	 * @param destroy If true, on cleanup will destroy `instance` instead of deparenting it
-	 *
-	 * @returns The instance with the properties applied. */
-	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: ChildNode[], destroy?: boolean): T
-
 	/** By default, springs run at 120 Hz in the `Heartbeat` event. Calling this
 	 * function can change when the solver runs, which will advance the simulation
 	 * time by `deltaTime` seconds.
@@ -408,10 +408,11 @@ declare namespace Vide {
 	/** Infers the names of the enum values from an enum item. Resolves to a union
 	 * of the enum items and their respective names. */
 	type InferEnumNames<T> = T extends EnumItem ? T | T["Name"] : T
+	type AllowNumericStrings<T> = T extends string ? string | number : T
 
 	/** Instance properties that can be written to or assigned Vide sources. */
 	type InstancePropertySources<T extends Instance> = {
-		[K in keyof WritableInstanceProperties<T>]?: Derivable<InferEnumNames<WritableInstanceProperties<T>[K]>>
+		[K in keyof WritableInstanceProperties<T>]?: Derivable<AllowNumericStrings<InferEnumNames<WritableInstanceProperties<T>[K]>>>
 	}
 
 	/** Instance event properties that can be passed a callback function. */

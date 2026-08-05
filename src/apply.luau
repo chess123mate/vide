@@ -81,6 +81,7 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 continue
             elseif property == "Actions" then -- TS support
                 process_properties(value, instance, cache, depth + 1)
+                continue
             end
 
             if type(value) == "function" then

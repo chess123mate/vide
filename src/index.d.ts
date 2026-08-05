@@ -350,7 +350,7 @@ declare namespace Vide {
 	 * @param destroy If true, on cleanup will destroy `instance` instead of deparenting it
 	 *
 	 * @returns The instance with the properties applied. */
-	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: Node<T>[], destroy?: boolean): T
+	function apply<T extends Instance>(instance: T, props?: InstanceProps<T>, children?: ChildNode[], destroy?: boolean): T
 
 	/** By default, springs run at 120 Hz in the `Heartbeat` event. Calling this
 	 * function can change when the solver runs, which will advance the simulation

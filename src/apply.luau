@@ -79,6 +79,8 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
             if property == "Parent" then
                 cache.parent = value
                 continue
+            elseif property == "Actions" then -- TS support
+                process_properties(value, instance, cache, depth + 1)
             end
 
             if type(value) == "function" then
@@ -92,9 +94,10 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 (instance :: any)[property] = value -- set property
             end
         elseif type(property) == "number" then
-            if type(value) == "function" then
+            local value_type = type(value)
+            if value_type == "function" then
                 implicit_effect.children(instance, value :: () -> ArrayOrV<Instance>) -- bind children
-            elseif type(value) == "table" then
+            elseif value_type == "table" then
                 if is_action(value) then
                     table.insert(cache.actions, (value :: any).callback :: () -> ()) -- add action to buffer
                 elseif flags.defer_nested_properties then
@@ -103,11 +106,9 @@ local function process_properties(properties: Map<unknown, unknown>, instance: I
                 else
                     process_properties(value :: Map<unknown, unknown>, instance, cache, depth + 1)
                 end
-            elseif type(value) == "userdata" then
+            elseif value_type == "userdata" then
                 (value :: Instance).Parent = instance -- parent child
             end
-        else
-            error(`Invalid property '{tostring(property)}'`, 0)
         end
     end
 end
@@ -157,7 +158,7 @@ local function apply<T>(instance: T & Instance, properties: {}?, children: { unk
     local parent = cache.parent
     if parent then
         if type(parent) == "function" then
-            implicit_effect.parent(instance, parent :: () -> Instance)
+            implicit_effect.property(instance, "Parent", parent :: () -> Instance)
         else
             (instance :: Instance).Parent = parent :: Instance
         end

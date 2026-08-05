@@ -1,10 +1,11 @@
-type Cleanup = () => void
 type Key = string | number | symbol
 
 export = Vide
 export as namespace Vide
 
 declare namespace Vide {
+	type Cleanup = () => void
+
 	/** A state container that can be read and updated. Calling the source
 	 * with no arguments will return the stored value, whereas calling it with an
 	 * argument (including `undefined`) will update the stored value.
@@ -110,12 +111,12 @@ declare namespace Vide {
 	function create<K extends keyof CreatableInstances>(
 		className: K,
 		props?: InstanceProps<CreatableInstances[K]>,
-		children?: Node<CreatableInstances[K]>[],
+		children?: ChildNode[],
 	): CreatableInstances[K]
 	function create<T extends Instance>(
 		objToClone: T,
 		props?: InstanceProps<T>,
-		children?: Node<T>[],
+		children?: ChildNode[],
 	): T
 
 	/** Creates a state container that can be read and updated (from anywhere - being in a scope is not required).
@@ -402,23 +403,7 @@ declare namespace Vide {
 	 * @param defaultValue The default value to store in the context. */
 	function context<T>(defaultValue?: T): Context<T>
 
-	// Elements
-
-	/** A value that can be passed to the `create()` function.
-	 * @template T The type of instance to create. */
-	export type Node<T extends Instance = Instance> =
-		| InstanceProps<T>
-		| Action<T>
-		| (() => Node<T> | undefined)
-		| Instance
-		| Nodes<T>
-
-	/** A collection of nodes. Vide unwraps these values when rendering, allowing for nested arrays and properties to be passed as children. */
-	type Nodes<T extends Instance = Instance> =
-		| Map<number, Node<T>>
-		| ReadonlyMap<number, Node<T>>
-		| readonly Node<T>[]
-		| { readonly [key: number]: Node<T> }
+	// Types for create/apply
 
 	/** Infers the names of the enum values from an enum item. Resolves to a union
 	 * of the enum items and their respective names. */
@@ -437,5 +422,17 @@ declare namespace Vide {
 	}
 
 	/** Instance properties and events that can be used with the `create`/`apply` functions. */
-	type InstanceProps<T extends Instance> = InstancePropertySources<T> & InstanceEventCallbacks<T>
+	type InstanceProps<T extends Instance> = InstancePropertySources<T> & InstanceEventCallbacks<T> & {
+		/** You may list actions, nested properties, and/or sources for properties here. */
+		Actions?: ActionNode<T>[]
+	}
+
+	type ActionNode<T extends Instance = Instance> =
+		| Action<T>
+		| (() => InstanceProps<T> | undefined)
+		| InstanceProps<T>
+
+	type ChildNode =
+		| Instance
+		| (() => Instance[] | Instance | undefined)
 }

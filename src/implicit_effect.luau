@@ -104,15 +104,5 @@ end
 
 return {
     property = implicit_effect_property,
-
-    parent = function(instance, parent)
-        local scope = get_scope() or error("cannot have implicit effects without a scope", 0)
-        local node = create_node(scope, function()
-            instance.Parent = parent()
-        end)
-        evaluate_node(node)
-        return node
-    end,
-
     children = implicit_effect_child,
 }
